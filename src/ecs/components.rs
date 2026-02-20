@@ -23,3 +23,10 @@ pub enum MeshType {
 pub struct MeshRenderer {
     pub mesh_type: MeshType,
 }
+
+// ── Material ───────────────────────────────────────────────────────────────
+
+/// Associe une texture (par TextureId) à une entité.
+pub struct Material {
+    pub texture_id: u32,
+}

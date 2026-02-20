@@ -5,7 +5,7 @@ mod ecs;
 mod mesh;
 
 use camera::Camera;
-use ecs::{MeshRenderer, MeshType, SparseSet, Transform};
+use ecs::{Material, MeshRenderer, MeshType, SparseSet, Transform};
 use mesh::{Vertex, CUBE_INDICES, CUBE_VERTICES};
 
 use bytemuck;
@@ -18,6 +18,14 @@ struct EntityGpu {
     uniform_buffer: wgpu::Buffer,
     bind_group:     wgpu::BindGroup,
 }
+/// Ressources GPU pour une texture chargee.
+struct TextureGpu {
+    #[allow(dead_code)]
+    texture:    wgpu::Texture,
+    view:       wgpu::TextureView,
+    bind_group: wgpu::BindGroup,
+}
+
 
 #[wasm_bindgen]
 pub struct World {
@@ -36,6 +44,16 @@ pub struct World {
     mesh_renderers: SparseSet<MeshRenderer>,
     entity_gpus:    SparseSet<EntityGpu>,
     camera: Camera,
+
+    // Textures
+    texture_bind_group_layout: wgpu::BindGroupLayout,
+    #[allow(dead_code)]
+    sampler:                   wgpu::Sampler,
+    default_tex:               TextureGpu,
+    textures:                  Vec<TextureGpu>,
+
+    // ECS
+    materials: SparseSet<Material>,
 }
 
 fn create_depth_texture(
@@ -58,6 +76,62 @@ fn create_depth_texture(
     });
     let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
     (texture, view)
+}
+
+/// Cree une TextureGpu depuis des donnees RGBA brutes.
+fn create_texture_from_data(
+    device:  &wgpu::Device,
+    queue:   &wgpu::Queue,
+    width:   u32,
+    height:  u32,
+    data:    &[u8],
+    layout:  &wgpu::BindGroupLayout,
+    sampler: &wgpu::Sampler,
+) -> TextureGpu {
+    let texture = device.create_texture(&wgpu::TextureDescriptor {
+        label: Some("tex"),
+        size: wgpu::Extent3d { width, height, depth_or_array_layers: 1 },
+        mip_level_count: 1,
+        sample_count:    1,
+        dimension:       wgpu::TextureDimension::D2,
+        format:          wgpu::TextureFormat::Rgba8UnormSrgb,
+        usage:           wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+        view_formats:    &[],
+    });
+
+    queue.write_texture(
+        wgpu::TexelCopyTextureInfo {
+            texture:   &texture,
+            mip_level: 0,
+            origin:    wgpu::Origin3d::ZERO,
+            aspect:    wgpu::TextureAspect::All,
+        },
+        data,
+        wgpu::TexelCopyBufferLayout {
+            offset:         0,
+            bytes_per_row:  Some(4 * width),
+            rows_per_image: None,
+        },
+        wgpu::Extent3d { width, height, depth_or_array_layers: 1 },
+    );
+
+    let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+    let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+        label:   Some("tex_bind_group"),
+        layout,
+        entries: &[
+            wgpu::BindGroupEntry {
+                binding:  0,
+                resource: wgpu::BindingResource::TextureView(&view),
+            },
+            wgpu::BindGroupEntry {
+                binding:  1,
+                resource: wgpu::BindingResource::Sampler(sampler),
+            },
+        ],
+    });
+
+    TextureGpu { texture, view, bind_group }
 }
 
 #[wasm_bindgen]
@@ -130,9 +204,48 @@ impl World {
             }],
         });
 
+        // Texture bind group layout (Group 1) : texture + sampler
+        let texture_bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("texture_bind_group_layout"),
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
+                    binding:    0,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture {
+                        sample_type:    wgpu::TextureSampleType::Float { filterable: true },
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        multisampled:   false,
+                    },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding:    1,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                    count: None,
+                },
+            ],
+        });
+
+        // Sampler partage (linear, clamp-to-edge)
+        let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+            address_mode_u: wgpu::AddressMode::ClampToEdge,
+            address_mode_v: wgpu::AddressMode::ClampToEdge,
+            mag_filter:     wgpu::FilterMode::Linear,
+            min_filter:     wgpu::FilterMode::Linear,
+            ..Default::default()
+        });
+
+        // Texture blanche 1x1 par defaut
+        let default_tex = create_texture_from_data(
+            &device, &queue, 1, 1,
+            &[255u8, 255, 255, 255],
+            &texture_bind_group_layout, &sampler,
+        );
+
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label:              Some("pipeline_layout"),
-            bind_group_layouts: &[&bind_group_layout],
+            bind_group_layouts: &[&bind_group_layout, &texture_bind_group_layout],
             ..Default::default()
         });
 
@@ -204,6 +317,11 @@ impl World {
             mesh_renderers: SparseSet::new(),
             entity_gpus:    SparseSet::new(),
             camera:         Camera::default(),
+            texture_bind_group_layout,
+            sampler,
+            default_tex,
+            textures:  Vec::new(),
+            materials: SparseSet::new(),
         })
     }
 }
@@ -277,6 +395,33 @@ impl World {
         self.camera.target = glam::Vec3::new(tx, ty, tz);
     }
 
+    // ── Textures ──────────────────────────────────────────────────────────────
+
+    /// Charge des pixels RGBA bruts en GPU. Retourne un TextureId (u32).
+    /// Cote TS : passer un Uint8Array de taille width * height * 4.
+    pub fn upload_texture(&mut self, width: u32, height: u32, data: &[u8]) -> u32 {
+        assert_eq!(
+            data.len() as u64,
+            4 * width as u64 * height as u64,
+            "upload_texture: data length ({}) != width * height * 4 ({})",
+            data.len(),
+            4 * width as u64 * height as u64,
+        );
+        let tex = create_texture_from_data(
+            &self.device, &self.queue,
+            width, height, data,
+            &self.texture_bind_group_layout, &self.sampler,
+        );
+        let id = self.textures.len() as u32;
+        self.textures.push(tex);
+        id
+    }
+
+    /// Associe une texture a une entite (doit avoir un MeshRenderer).
+    pub fn add_material(&mut self, entity_id: usize, texture_id: u32) {
+        self.materials.insert(entity_id, Material { texture_id });
+    }
+
     // ── Rendu ─────────────────────────────────────────────────────────────────
 
     pub fn render_frame(&self, _delta_ms: f32) {
@@ -348,10 +493,24 @@ impl World {
             pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
             pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
 
-            // Draw call par entité qui a un MeshRenderer + EntityGpu
+            // Draw call par entité : bind group 0 (MVP) + bind group 1 (texture)
             for (id, _renderer) in self.mesh_renderers.iter() {
                 let Some(gpu) = self.entity_gpus.get(id) else { continue };
+
+                // Sélectionner la texture : Material si présent, sinon blanc par défaut
+                let tex_bg = if let Some(mat) = self.materials.get(id) {
+                    let tex_idx = mat.texture_id as usize;
+                    if tex_idx < self.textures.len() {
+                        &self.textures[tex_idx].bind_group
+                    } else {
+                        &self.default_tex.bind_group
+                    }
+                } else {
+                    &self.default_tex.bind_group
+                };
+
                 pass.set_bind_group(0, &gpu.bind_group, &[]);
+                pass.set_bind_group(1, tex_bg, &[]);
                 pass.draw_indexed(0..36, 0, 0..1);
             }
         }
