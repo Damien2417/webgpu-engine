@@ -7,4 +7,7 @@ export default defineConfig({
     wasm(),
     topLevelAwait(),
   ],
+  optimizeDeps: {
+    exclude: ['engine-core'],
+  },
 });

@@ -42,7 +42,7 @@ Clear color uniquement (bleu sombre `0.1, 0.2, 0.3`). Pas de géométrie, pas de
 
 | Fichier | Changement |
 |---|---|
-| `engine-core/Cargo.toml` | +`wgpu@23`, `wasm-bindgen-futures`, `js-sys`, +features `HtmlCanvasElement` |
+| `engine-core/Cargo.toml` | +`wgpu@22`, `wasm-bindgen-futures`, `js-sys`, +features `HtmlCanvasElement` |
 | `engine-core/src/lib.rs` | Réécriture : Engine struct GPU + init async + render_frame |
 | `game-app/index.html` | `<div id="app">` → `<canvas id="game-canvas" width="800" height="600">` |
 | `game-app/vite.config.ts` | Nouveau : `vite-plugin-wasm` + `vite-plugin-top-level-await` |
@@ -114,7 +114,7 @@ js-sys = "0.3"
 web-sys = { version = "0.3", features = ["console", "HtmlCanvasElement"] }
 
 [dependencies.wgpu]
-version = "23"
+version = "22"
 default-features = false
 features = ["webgpu", "wgsl"]
 ```
