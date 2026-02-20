@@ -1,0 +1,25 @@
+[package]
+name = "engine-core"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+wasm-bindgen = "0.2"
+wasm-bindgen-futures = "0.4"
+js-sys = "0.3"
+
+web-sys = { version = "0.3", features = [
+    "console",
+    "HtmlCanvasElement",
+] }
+
+[dependencies.wgpu]
+version = "22"
+default-features = false
+features = [
+    "webgpu",
+    "wgsl",
+]
