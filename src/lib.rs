@@ -17,7 +17,8 @@ impl Engine {
         console_error_panic_hook::set_once();
 
         // 1. Instance WebGPU (navigateur uniquement)
-        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
+        // wgpu 28 : Instance::new prend &InstanceDescriptor
+        let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
             backends: wgpu::Backends::BROWSER_WEBGPU,
             ..Default::default()
         });
@@ -30,6 +31,7 @@ impl Engine {
             .map_err(|e| JsValue::from_str(&e.to_string()))?;
 
         // 3. Adapter compatible (async)
+        // wgpu 28 : request_adapter retourne Result au lieu de Option
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions {
                 power_preference:       wgpu::PowerPreference::default(),
@@ -37,11 +39,11 @@ impl Engine {
                 force_fallback_adapter: false,
             })
             .await
-            .ok_or_else(|| JsValue::from_str("Aucun adapter WebGPU disponible"))?;
+            .map_err(|e| JsValue::from_str(&format!("{e:?}")))?;
 
         // 4. Device + Queue (async)
         let (device, queue) = adapter
-            .request_device(&wgpu::DeviceDescriptor::default(), None)
+            .request_device(&wgpu::DeviceDescriptor::default())
             .await
             .map_err(|e| JsValue::from_str(&e.to_string()))?;
 
@@ -97,6 +99,7 @@ impl Engine {
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                     view:           &view,
                     resolve_target: None,
+                    depth_slice:    None, // wgpu 28 : requis, None pour textures 2D
                     ops: wgpu::Operations {
                         load:  wgpu::LoadOp::Clear(wgpu::Color {
                             r: 0.1,
@@ -110,6 +113,7 @@ impl Engine {
                 depth_stencil_attachment: None,
                 timestamp_writes:         None,
                 occlusion_query_set:      None,
+                multiview_mask:           None, // wgpu 28 : requis, None = pas de multiview
             });
         } // _pass droppé ici → commandes du render pass finalisées
 
