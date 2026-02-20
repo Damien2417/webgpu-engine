@@ -18,7 +18,7 @@ web-sys = { version = "0.3", features = [
 ] }
 
 [dependencies.wgpu]
-version = "22"
+version = "23"
 default-features = false
 features = [
     "webgpu",
