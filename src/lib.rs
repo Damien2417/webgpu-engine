@@ -12,6 +12,8 @@ pub struct Engine {
 #[wasm_bindgen]
 impl Engine {
     pub async fn init(canvas: HtmlCanvasElement) -> Result<Engine, JsValue> {
+        console_error_panic_hook::set_once();
+
         // 1. Instance WebGPU (navigateur uniquement)
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
             backends: wgpu::Backends::BROWSER_WEBGPU,
@@ -55,11 +57,13 @@ impl Engine {
             width,
             height,
             present_mode: wgpu::PresentMode::Fifo,
-            alpha_mode:   wgpu::CompositeAlphaMode::Opaque,
+            alpha_mode:   wgpu::CompositeAlphaMode::Opaque, // BROWSER_WEBGPU supporte toujours Opaque
             view_formats: vec![],
             desired_maximum_frame_latency: 2,
         };
         surface.configure(&device, &config);
+
+        web_sys::console::log_1(&"[Engine] WebGPU initialisé avec succès".into());
 
         Ok(Engine { device, queue, surface, config })
     }
@@ -67,8 +71,12 @@ impl Engine {
     pub fn render_frame(&self) {
         // Acquérir la texture courante du backbuffer
         let output = match self.surface.get_current_texture() {
-            Ok(t)  => t,
-            Err(_) => return, // surface perdue (ex: resize) — skip ce frame
+            Ok(t) => t,
+            Err(wgpu::SurfaceError::OutOfMemory) => {
+                web_sys::console::error_1(&"[Engine] GPU hors mémoire — arrêt du rendu".into());
+                return;
+            }
+            Err(_) => return, // Lost/Outdated/Timeout — skip ce frame
         };
 
         let view = output
