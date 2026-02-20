@@ -1,13 +1,13 @@
-import init, { Engine } from '../../engine-core/pkg/engine_core.js';
+import init, { World } from '../../engine-core/pkg/engine_core.js';
 
 await init();
 
 const canvas = document.getElementById('game-canvas') as HTMLCanvasElement | null;
 if (!canvas) throw new Error('Canvas #game-canvas introuvable');
 
-let engine: Engine;
+let world: World;
 try {
-  engine = await Engine.init(canvas);
+  world = await World.new(canvas);
 } catch (err) {
   const msg = err instanceof Error ? err.message : String(err);
   document.body.innerHTML =
@@ -15,9 +15,11 @@ try {
   throw err;
 }
 
-// Créer un cube et positionner la caméra
-const cubeId = engine.create_cube();
-engine.set_camera(3, 2, 5,   0, 0, 0);
+// Créer une entité cube via l'ECS
+const cube = world.create_entity();
+world.add_transform(cube, 0, 0, 0);
+world.add_mesh_renderer(cube);
+world.set_camera(3, 2, 5,  0, 0, 0);
 
 let angle    = 0;
 let lastTime = performance.now();
@@ -27,11 +29,10 @@ function loop(): void {
   const delta = now - lastTime;
   lastTime    = now;
 
-  // Faire tourner le cube sur l'axe Y en fonction du delta-time
   angle += delta * 0.05; // ~18°/sec
 
-  engine.set_rotation(cubeId, 15, angle, 0);
-  engine.render_frame(delta);
+  world.set_rotation(cube, 15, angle, 0);
+  world.render_frame(delta);
   requestAnimationFrame(loop);
 }
 
