@@ -543,3 +543,36 @@ impl World {
         output.present();
     }
 }
+
+#[wasm_bindgen]
+impl World {
+    // ── Physique ─────────────────────────────────────────────────────────────
+
+    /// Désigne l'entité joueur. La caméra FPS la suivra automatiquement.
+    pub fn set_player(&mut self, id: usize) {
+        self.player_entity = Some(id);
+    }
+
+    /// Ajoute un RigidBody. `is_static = true` pour les entités fixes (sol, murs).
+    pub fn add_rigid_body(&mut self, id: usize, is_static: bool) {
+        self.rigid_bodies.insert(id, RigidBody { is_static, ..RigidBody::default() });
+    }
+
+    /// Ajoute un Collider AABB (demi-extents en mètres). Centre = Transform.position.
+    pub fn add_collider_aabb(&mut self, id: usize, hx: f32, hy: f32, hz: f32) {
+        self.colliders.insert(id, Collider {
+            half_extents: glam::Vec3::new(hx, hy, hz),
+        });
+    }
+
+    // ── Input ────────────────────────────────────────────────────────────────
+
+    /// Transmet l'état input du frame courant.
+    /// `keys` bitmask : bit0=W, bit1=S, bit2=A, bit3=D, bit4=SPACE.
+    /// `mouse_dx/dy` : delta pixels depuis le dernier frame (Pointer Lock).
+    pub fn set_input(&mut self, keys: u32, mouse_dx: f32, mouse_dy: f32) {
+        self.input.keys     = keys;
+        self.input.mouse_dx = mouse_dx;
+        self.input.mouse_dy = mouse_dy;
+    }
+}
