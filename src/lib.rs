@@ -5,7 +5,7 @@ mod ecs;
 mod mesh;
 
 use camera::Camera;
-use ecs::{Collider, Material, MeshRenderer, MeshType, RigidBody, SparseSet, Transform};
+use ecs::{Collider, Material, MeshRenderer, MeshType, PointLight, RigidBody, SparseSet, Transform};
 use mesh::{Vertex, CUBE_INDICES, CUBE_VERTICES};
 
 use bytemuck;
@@ -34,6 +34,48 @@ struct TextureGpu {
     bind_group: wgpu::BindGroup,
 }
 
+
+
+// ── Types GPU pour l'éclairage ────────────────────────────────────────────
+
+#[repr(C)]
+#[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
+struct EntityUniforms {
+    mvp:   [[f32; 4]; 4],
+    model: [[f32; 4]; 4],
+}
+
+#[repr(C)]
+#[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
+struct GpuDirectionalLight {
+    direction: [f32; 3], _p0: f32,
+    color:     [f32; 3], intensity: f32,
+}
+
+#[repr(C)]
+#[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
+struct GpuPointLight {
+    position:  [f32; 3], _p0: f32,
+    color:     [f32; 3], intensity: f32,
+}
+
+#[repr(C)]
+#[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
+struct LightUniforms {
+    camera_pos:  [f32; 4],             // offset   0 — xyz utilisé, w=0
+    directional: GpuDirectionalLight,  // offset  16 — 32 bytes
+    n_points:    u32,                  // offset  48
+    _pad:        [u32; 3],             // offset  52 — alignement array<PointLight,8> sur 16
+    points:      [GpuPointLight; 8],   // offset  64 — 8 × 32 = 256 bytes
+}
+// Total : 320 bytes
+
+/// Données CPU pour la lumière directionnelle unique.
+struct DirectionalLightData {
+    direction: glam::Vec3,
+    color:     glam::Vec3,
+    intensity: f32,
+}
 
 #[wasm_bindgen]
 pub struct World {
@@ -72,6 +114,13 @@ pub struct World {
     player_entity:  Option<usize>,
     camera_yaw:     f32,   // radians — rotation horizontale
     camera_pitch:   f32,   // radians — rotation verticale, clampé ±89°
+
+    // Éclairage
+    point_lights:            SparseSet<PointLight>,
+    directional_light:       Option<DirectionalLightData>,
+    light_bind_group_layout: wgpu::BindGroupLayout,
+    light_buffer:            wgpu::Buffer,
+    light_bind_group:        wgpu::BindGroup,
 }
 
 fn create_depth_texture(
@@ -290,9 +339,40 @@ impl World {
             &texture_bind_group_layout, &sampler,
         );
 
+        // ── Light bind group layout (Group 2) ────────────────────────────────────
+        let light_bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("light_bind_group_layout"),
+            entries: &[wgpu::BindGroupLayoutEntry {
+                binding:    0,
+                visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Buffer {
+                    ty:                 wgpu::BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size:   None,
+                },
+                count: None,
+            }],
+        });
+
+        let light_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label:              Some("light_buffer"),
+            size:               std::mem::size_of::<LightUniforms>() as u64,
+            usage:              wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+
+        let light_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label:   Some("light_bind_group"),
+            layout:  &light_bind_group_layout,
+            entries: &[wgpu::BindGroupEntry {
+                binding:  0,
+                resource: light_buffer.as_entire_binding(),
+            }],
+        });
+
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label:              Some("pipeline_layout"),
-            bind_group_layouts: &[&bind_group_layout, &texture_bind_group_layout],
+            bind_group_layouts: &[&bind_group_layout, &texture_bind_group_layout, &light_bind_group_layout],
             ..Default::default()
         });
 
@@ -375,6 +455,11 @@ impl World {
             player_entity: None,
             camera_yaw:    0.0,
             camera_pitch:  0.0,
+            point_lights:      SparseSet::new(),
+            directional_light: None,
+            light_bind_group_layout,
+            light_buffer,
+            light_bind_group,
         })
     }
 }
