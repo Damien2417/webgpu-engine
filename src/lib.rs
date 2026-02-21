@@ -9,6 +9,8 @@ use camera::Camera;
 use ecs::{Collider, Material, MeshRenderer, MeshType, PointLight, RigidBody, SparseSet, Transform};
 use mesh::{Vertex, CUBE_INDICES, CUBE_VERTICES};
 
+use std::collections::{HashMap, HashSet};
+
 use bytemuck;
 use glam::{EulerRot, Mat4};
 use wasm_bindgen::prelude::*;
@@ -122,6 +124,10 @@ pub struct World {
     light_bind_group_layout: wgpu::BindGroupLayout,
     light_buffer:            wgpu::Buffer,
     light_bind_group:        wgpu::BindGroup,
+
+    // Scènes
+    persistent_entities: HashSet<usize>,
+    texture_registry:    HashMap<String, u32>,
 }
 
 fn create_depth_texture(
@@ -461,6 +467,8 @@ impl World {
             light_bind_group_layout,
             light_buffer,
             light_bind_group,
+            persistent_entities: HashSet::new(),
+            texture_registry:    HashMap::new(),
         })
     }
 }
