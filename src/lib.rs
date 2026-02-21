@@ -931,3 +931,32 @@ impl World {
         }
     }
 }
+
+impl World {
+    /// Supprime tous les composants des entités non-persistantes.
+    /// Les entités persistantes et la texture_registry sont conservées.
+    /// La directional_light est réinitialisée.
+    fn clear_scene(&mut self) {
+        // Collecter tous les IDs présents dans n'importe quel SparseSet
+        let all_ids: HashSet<usize> = self.transforms.iter().map(|(id, _)| id)
+            .chain(self.mesh_renderers.iter().map(|(id, _)| id))
+            .chain(self.materials.iter().map(|(id, _)| id))
+            .chain(self.rigid_bodies.iter().map(|(id, _)| id))
+            .chain(self.colliders.iter().map(|(id, _)| id))
+            .chain(self.point_lights.iter().map(|(id, _)| id))
+            .filter(|id| !self.persistent_entities.contains(id))
+            .collect();
+
+        for id in all_ids {
+            self.transforms.remove(id);
+            self.mesh_renderers.remove(id);
+            self.entity_gpus.remove(id);
+            self.materials.remove(id);
+            self.rigid_bodies.remove(id);
+            self.colliders.remove(id);
+            self.point_lights.remove(id);
+        }
+
+        self.directional_light = None;
+    }
+}
