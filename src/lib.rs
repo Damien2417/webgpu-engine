@@ -680,7 +680,51 @@ impl World {
         }
 
         // ── 4. Résolution AABB ───────────────────────────────────────────────
-        // (implémenté dans Task 5 — placeholder)
+        let static_ids: Vec<usize> = self.rigid_bodies
+            .iter()
+            .filter(|(_, rb)| rb.is_static)
+            .map(|(id, _)| id)
+            .collect();
+
+        for &dyn_id in &dynamic_ids {
+            for &sta_id in &static_ids {
+                // Extraire positions + half_extents (Vec3 est Copy → pas de borrow actif)
+                let (dyn_pos, dyn_he) = match (
+                    self.transforms.get(dyn_id),
+                    self.colliders.get(dyn_id),
+                ) {
+                    (Some(tr), Some(co)) => (tr.position, co.half_extents),
+                    _ => continue,
+                };
+
+                let (sta_pos, sta_he) = match (
+                    self.transforms.get(sta_id),
+                    self.colliders.get(sta_id),
+                ) {
+                    (Some(tr), Some(co)) => (tr.position, co.half_extents),
+                    _ => continue,
+                };
+
+                let Some(mtv) = aabb_mtv(dyn_pos, dyn_he, sta_pos, sta_he) else { continue };
+
+                // Corriger position (soustraire le MTV)
+                if let Some(tr) = self.transforms.get_mut(dyn_id) {
+                    tr.position -= mtv;
+                }
+
+                // Annuler la composante velocity + détecter on_ground
+                if let Some(rb) = self.rigid_bodies.get_mut(dyn_id) {
+                    if mtv.x.abs() > 0.0 { rb.velocity.x = 0.0; }
+                    if mtv.z.abs() > 0.0 { rb.velocity.z = 0.0; }
+                    if mtv.y.abs() > 0.0 {
+                        // mtv.y < 0 : soustraire une valeur négative → position.y augmente
+                        // → l'entité statique est en dessous → on_ground
+                        if mtv.y < 0.0 { rb.on_ground = true; }
+                        rb.velocity.y = 0.0;
+                    }
+                }
+            }
+        }
 
         // ── 5. Caméra FPS ────────────────────────────────────────────────────
         if let Some(pid) = self.player_entity {
