@@ -5,7 +5,7 @@ mod ecs;
 mod mesh;
 
 use camera::Camera;
-use ecs::{Material, MeshRenderer, MeshType, SparseSet, Transform};
+use ecs::{Collider, Material, MeshRenderer, MeshType, RigidBody, SparseSet, Transform};
 use mesh::{Vertex, CUBE_INDICES, CUBE_VERTICES};
 
 use bytemuck;
@@ -18,6 +18,13 @@ struct EntityGpu {
     uniform_buffer: wgpu::Buffer,
     bind_group:     wgpu::BindGroup,
 }
+#[derive(Default)]
+struct InputState {
+    keys:     u32,
+    mouse_dx: f32,
+    mouse_dy: f32,
+}
+
 /// Ressources GPU pour une texture chargee.
 struct TextureGpu {
     #[allow(dead_code)]
@@ -54,6 +61,16 @@ pub struct World {
 
     // ECS
     materials: SparseSet<Material>,
+
+    // Physique
+    rigid_bodies:  SparseSet<RigidBody>,
+    colliders:     SparseSet<Collider>,
+
+    // Input + caméra FPS
+    input:          InputState,
+    player_entity:  Option<usize>,
+    camera_yaw:     f32,   // radians — rotation horizontale
+    camera_pitch:   f32,   // radians — rotation verticale, clampé ±89°
 }
 
 fn create_depth_texture(
@@ -322,6 +339,12 @@ impl World {
             default_tex,
             textures:  Vec::new(),
             materials: SparseSet::new(),
+            rigid_bodies:  SparseSet::new(),
+            colliders:     SparseSet::new(),
+            input:         InputState::default(),
+            player_entity: None,
+            camera_yaw:    0.0,
+            camera_pitch:  0.0,
         })
     }
 }
