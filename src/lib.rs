@@ -18,6 +18,7 @@ struct EntityGpu {
     uniform_buffer: wgpu::Buffer,
     bind_group:     wgpu::BindGroup,
 }
+
 #[derive(Default)]
 struct InputState {
     keys:     u32,
