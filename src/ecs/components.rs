@@ -54,3 +54,10 @@ impl Default for RigidBody {
 pub struct Collider {
     pub half_extents: Vec3,  // demi-dimensions ; centre = Transform.position
 }
+
+// ── PointLight ────────────────────────────────────────────────────────────
+
+pub struct PointLight {
+    pub color:     glam::Vec3,
+    pub intensity: f32,
+}
