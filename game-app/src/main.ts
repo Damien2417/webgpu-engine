@@ -2,7 +2,8 @@ import init, { World } from '../../engine-core/pkg/engine_core.js';
 
 await init();
 
-const canvas = document.getElementById('game-canvas') as HTMLCanvasElement | null;
+// ── Canvas + WebGPU ───────────────────────────────────────────────────────
+const canvas = document.getElementById('game-canvas') as HTMLCanvasElement;
 if (!canvas) throw new Error('Canvas #game-canvas introuvable');
 
 let world: World;
@@ -10,37 +11,127 @@ try {
   world = await World.new(canvas);
 } catch (err) {
   const msg = err instanceof Error ? err.message : String(err);
-  document.body.innerHTML =
-    `<pre style="color:red;padding:20px">Erreur WebGPU:\n${msg}</pre>`;
+  document.body.innerHTML = `<pre style="color:red;padding:20px">Erreur WebGPU:\n${msg}</pre>`;
   throw err;
 }
 
-// ── Générer une texture damier 8×8 programmatiquement ────────────────────────
-function createCheckerTexture(world: World, size: number): number {
+// ── Constantes input ──────────────────────────────────────────────────────
+const KEY_W     = 1 << 0;
+const KEY_S     = 1 << 1;
+const KEY_A     = 1 << 2;
+const KEY_D     = 1 << 3;
+const KEY_SPACE = 1 << 4;
+
+// ── Générateur de texture damier ──────────────────────────────────────────
+function makeChecker(
+  world: World,
+  size: number,
+  c1: [number, number, number],
+  c2: [number, number, number]
+): number {
   const data = new Uint8Array(size * size * 4);
   for (let y = 0; y < size; y++) {
     for (let x = 0; x < size; x++) {
-      const isLight = (x + y) % 2 === 0;
+      const [r, g, b] = (x + y) % 2 === 0 ? c1 : c2;
       const i = (y * size + x) * 4;
-      data[i]     = isLight ? 255 : 40;  // R
-      data[i + 1] = isLight ? 255 : 40;  // G
-      data[i + 2] = isLight ? 255 : 40;  // B
-      data[i + 3] = 255;                 // A
+      data[i] = r; data[i + 1] = g; data[i + 2] = b; data[i + 3] = 255;
     }
   }
   return world.upload_texture(size, size, data);
 }
 
-// ── Scène ─────────────────────────────────────────────────────────────────────
-const checkerId = createCheckerTexture(world, 8);
+const floorTex = makeChecker(world, 8, [180, 180, 180], [60, 60, 60]);
+const boxTex   = makeChecker(world, 4, [220, 120,  60], [140, 60, 20]);
 
-const cube = world.create_entity();
-world.add_transform(cube, 0, 0, 0);
-world.add_mesh_renderer(cube);
-world.add_material(cube, checkerId);
-world.set_camera(3, 2, 5,  0, 0, 0);
+// ── Scène ─────────────────────────────────────────────────────────────────
 
-let angle    = 0;
+// Sol invisible (collider seul)
+const floor = world.create_entity();
+world.add_transform(floor, 0, -0.5, 0);
+world.add_rigid_body(floor, true);
+world.add_collider_aabb(floor, 10, 0.5, 10);
+
+// Sol visible (cube plat décoratif, pas de physique)
+const floorMesh = world.create_entity();
+world.add_transform(floorMesh, 0, -0.5, 0);
+world.set_scale(floorMesh, 20, 1, 20);
+world.add_mesh_renderer(floorMesh);
+world.add_material(floorMesh, floorTex);
+
+// Cubes obstacles statiques
+const obstacles: [number, number, number][] = [
+  [ 3, 0.5,  3], [-3, 0.5,  3],
+  [ 3, 0.5, -3], [-3, 0.5, -3],
+  [ 6, 0.5,  0], [-6, 0.5,  0],
+  [ 0, 0.5,  6], [ 0, 0.5, -6],
+];
+for (const [x, y, z] of obstacles) {
+  const box = world.create_entity();
+  world.add_transform(box, x, y, z);
+  world.add_mesh_renderer(box);
+  world.add_material(box, boxTex);
+  world.add_rigid_body(box, true);
+  world.add_collider_aabb(box, 0.5, 0.5, 0.5);
+}
+
+// Joueur (dynamique, sans MeshRenderer — vue FPS)
+const player = world.create_entity();
+world.add_transform(player, 0, 2, 0);   // démarre en hauteur, tombe sur le sol
+world.add_rigid_body(player, false);
+world.add_collider_aabb(player, 0.3, 0.9, 0.3);
+world.set_player(player);
+
+// ── Input ─────────────────────────────────────────────────────────────────
+let keysMask   = 0;
+let mouseDxAcc = 0;
+let mouseDyAcc = 0;
+
+document.addEventListener('keydown', (e) => {
+  switch (e.code) {
+    case 'KeyW':  keysMask |= KEY_W;     break;
+    case 'KeyS':  keysMask |= KEY_S;     break;
+    case 'KeyA':  keysMask |= KEY_A;     break;
+    case 'KeyD':  keysMask |= KEY_D;     break;
+    case 'Space': keysMask |= KEY_SPACE; e.preventDefault(); break;
+  }
+});
+
+document.addEventListener('keyup', (e) => {
+  switch (e.code) {
+    case 'KeyW':  keysMask &= ~KEY_W;     break;
+    case 'KeyS':  keysMask &= ~KEY_S;     break;
+    case 'KeyA':  keysMask &= ~KEY_A;     break;
+    case 'KeyD':  keysMask &= ~KEY_D;     break;
+    case 'Space': keysMask &= ~KEY_SPACE; break;
+  }
+});
+
+document.addEventListener('mousemove', (e) => {
+  if (document.pointerLockElement === canvas) {
+    mouseDxAcc += e.movementX;
+    mouseDyAcc += e.movementY;
+  }
+});
+
+// Pointer Lock au clic sur le canvas
+canvas.addEventListener('click', () => canvas.requestPointerLock());
+
+// Overlay "Cliquer pour jouer"
+const overlay = document.createElement('div');
+overlay.textContent = 'Cliquer pour jouer — WASD + Souris + ESPACE (saut)';
+overlay.style.cssText = [
+  'position:fixed', 'inset:0', 'display:flex',
+  'align-items:center', 'justify-content:center',
+  'color:white', 'font:bold 20px sans-serif',
+  'background:rgba(0,0,0,.55)', 'pointer-events:none',
+].join(';');
+document.body.appendChild(overlay);
+
+document.addEventListener('pointerlockchange', () => {
+  overlay.style.display = document.pointerLockElement === canvas ? 'none' : 'flex';
+});
+
+// ── Boucle de jeu ─────────────────────────────────────────────────────────
 let lastTime = performance.now();
 
 function loop(): void {
@@ -48,8 +139,11 @@ function loop(): void {
   const delta = now - lastTime;
   lastTime    = now;
 
-  angle += delta * 0.05;
-  world.set_rotation(cube, 15, angle, 0);
+  world.set_input(keysMask, mouseDxAcc, mouseDyAcc);
+  mouseDxAcc = 0;
+  mouseDyAcc = 0;
+
+  world.update(delta);
   world.render_frame(delta);
   requestAnimationFrame(loop);
 }
