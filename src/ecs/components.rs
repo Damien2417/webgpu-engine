@@ -58,6 +58,6 @@ pub struct Collider {
 // ── PointLight ────────────────────────────────────────────────────────────
 
 pub struct PointLight {
-    pub color:     glam::Vec3,
+    pub color:     Vec3,
     pub intensity: f32,
 }
