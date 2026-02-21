@@ -43,61 +43,32 @@ function makeChecker(
   return w.upload_texture(size, size, data);
 }
 
-const floorTex = makeChecker(world, 8, [180, 180, 180], [60, 60, 60]);
-const boxTex   = makeChecker(world, 4, [220, 120,  60], [140, 60, 20]);
+// ── Upload textures et enregistrement dans le registre ───────────────────
+const floorTexId = makeChecker(world, 8, [180, 180, 180], [60, 60, 60]);
+const boxTexId   = makeChecker(world, 4, [220, 120,  60], [140, 60, 20]);
 
-// ── Scène ─────────────────────────────────────────────────────────────────
+world.register_texture('floor_checker', floorTexId);
+world.register_texture('box_checker',   boxTexId);
 
-// Sol invisible (collider seul)
-const floor = world.create_entity();
-world.add_transform(floor, 0, -0.5, 0);
-world.add_rigid_body(floor, true);
-world.add_collider_aabb(floor, 10, 0.5, 10);
-
-// Sol visible (cube plat décoratif, pas de physique)
-const floorMesh = world.create_entity();
-world.add_transform(floorMesh, 0, -0.5, 0);
-world.set_scale(floorMesh, 20, 1, 20);
-world.add_mesh_renderer(floorMesh);
-world.add_material(floorMesh, floorTex);
-
-// Cubes obstacles statiques
-const obstacles: [number, number, number][] = [
-  [ 3, 0.5,  3], [-3, 0.5,  3],
-  [ 3, 0.5, -3], [-3, 0.5, -3],
-  [ 6, 0.5,  0], [-6, 0.5,  0],
-  [ 0, 0.5,  6], [ 0, 0.5, -6],
-];
-for (const [x, y, z] of obstacles) {
-  const box = world.create_entity();
-  world.add_transform(box, x, y, z);
-  world.add_mesh_renderer(box);
-  world.add_material(box, boxTex);
-  world.add_rigid_body(box, true);
-  world.add_collider_aabb(box, 0.5, 0.5, 0.5);
-}
-
-// Joueur (dynamique, sans MeshRenderer — vue FPS)
+// ── Joueur persistant (créé une seule fois, survit aux load_scene) ────────
 const player = world.create_entity();
-world.add_transform(player, 0, 2, 0);   // démarre en hauteur, tombe sur le sol
+world.add_transform(player, 0, 2, 0);
 world.add_rigid_body(player, false);
 world.add_collider_aabb(player, 0.3, 0.9, 0.3);
 world.set_player(player);
+world.set_persistent(player, true);
 
-// ── Éclairage ──────────────────────────────────────────────────────────────
+// ── Chargement de scène ───────────────────────────────────────────────────
+let currentLevel = 1;
 
-// Lumière directionnelle (soleil oblique, légèrement chaud)
-world.add_directional_light(-0.5, -1.0, -0.3,  1.0, 0.95, 0.8,  1.2);
+async function loadLevel(n: number): Promise<void> {
+  const json = await fetch(`/scenes/level${n}.json`).then(r => r.text());
+  world.load_scene(json);
+  currentLevel = n;
+  console.log(`[Scene] level${n} chargé`);
+}
 
-// Point light cyan (coin positif)
-const lamp1 = world.create_entity();
-world.add_transform(lamp1, 4, 2.5, 4);
-world.add_point_light(lamp1, 0.3, 0.8, 1.0, 10.0);
-
-// Point light orange (coin négatif)
-const lamp2 = world.create_entity();
-world.add_transform(lamp2, -4, 2.5, -4);
-world.add_point_light(lamp2, 1.0, 0.4, 0.2, 10.0);
+await loadLevel(1);
 
 // ── Input ─────────────────────────────────────────────────────────────────
 let keysMask   = 0;
@@ -106,11 +77,13 @@ let mouseDyAcc = 0;
 
 document.addEventListener('keydown', (e) => {
   switch (e.code) {
-    case 'KeyW':  keysMask |= KEY_W;     break;
-    case 'KeyS':  keysMask |= KEY_S;     break;
-    case 'KeyA':  keysMask |= KEY_A;     break;
-    case 'KeyD':  keysMask |= KEY_D;     break;
-    case 'Space': keysMask |= KEY_SPACE; e.preventDefault(); break;
+    case 'KeyW':     keysMask |= KEY_W;     break;
+    case 'KeyS':     keysMask |= KEY_S;     break;
+    case 'KeyA':     keysMask |= KEY_A;     break;
+    case 'KeyD':     keysMask |= KEY_D;     break;
+    case 'Space':    keysMask |= KEY_SPACE; e.preventDefault(); break;
+    // Touche N = niveau suivant (switch de scène in-game)
+    case 'KeyN':     loadLevel(currentLevel === 1 ? 2 : 1); break;
   }
 });
 
@@ -131,12 +104,11 @@ document.addEventListener('mousemove', (e) => {
   }
 });
 
-// Pointer Lock au clic sur le canvas
 canvas.addEventListener('click', () => canvas.requestPointerLock());
 
-// Overlay "Cliquer pour jouer"
+// Overlay
 const overlay = document.createElement('div');
-overlay.textContent = 'Cliquer pour jouer — WASD + Souris + ESPACE (saut)';
+overlay.textContent = 'Cliquer pour jouer — WASD + Souris + ESPACE (saut) + N (changer de scène)';
 overlay.style.cssText = [
   'position:fixed', 'inset:0', 'display:flex',
   'align-items:center', 'justify-content:center',
