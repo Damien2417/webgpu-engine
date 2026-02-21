@@ -7,6 +7,8 @@ mod scene;
 
 use camera::Camera;
 use ecs::{Collider, Material, MeshRenderer, MeshType, PointLight, RigidBody, SparseSet, Transform};
+use scene::{SceneData, SceneDirectionalLight, SceneMaterial, ScenePointLight,
+            SceneRigidBody, SceneTransform};
 use mesh::{Vertex, CUBE_INDICES, CUBE_VERTICES};
 
 use std::collections::{HashMap, HashSet};
@@ -929,6 +931,139 @@ impl World {
         } else {
             self.persistent_entities.remove(&id);
         }
+    }
+
+    /// Charge une scène depuis un JSON string.
+    /// Supprime les entités non-persistantes, puis crée les entités du JSON.
+    /// Retourne un Uint32Array des IDs des nouvelles entités créées.
+    pub fn load_scene(&mut self, json: &str) -> js_sys::Uint32Array {
+        let scene: SceneData = match serde_json::from_str(json) {
+            Ok(s)  => s,
+            Err(e) => {
+                web_sys::console::error_1(&format!("[load_scene] JSON invalide: {e}").into());
+                return js_sys::Uint32Array::new_with_length(0);
+            }
+        };
+
+        self.clear_scene();
+
+        // Lumière directionnelle
+        if let Some(dl) = scene.directional_light {
+            self.directional_light = Some(DirectionalLightData {
+                direction: glam::Vec3::from(dl.direction),
+                color:     glam::Vec3::from(dl.color),
+                intensity: dl.intensity,
+            });
+        }
+
+        // Créer les entités
+        let mut new_ids: Vec<u32> = Vec::new();
+
+        for entity_data in scene.entities {
+            let id = self.create_entity();
+            new_ids.push(id as u32);
+
+            if let Some(t) = entity_data.transform {
+                let mut tr = Transform::default();
+                tr.position = glam::Vec3::from(t.position);
+                tr.rotation = glam::Vec3::from(t.rotation);
+                tr.scale    = glam::Vec3::from(t.scale);
+                self.transforms.insert(id, tr);
+            }
+
+            if entity_data.mesh_renderer == Some(true) {
+                self.add_mesh_renderer(id);
+            }
+
+            if let Some(mat) = entity_data.material {
+                let tex_id = self.texture_registry
+                    .get(&mat.texture)
+                    .copied()
+                    .unwrap_or_else(|| {
+                        web_sys::console::warn_1(
+                            &format!("[load_scene] texture '{}' non enregistrée, blanc utilisé", mat.texture).into()
+                        );
+                        u32::MAX  // sentinel → default_tex dans render_frame
+                    });
+                self.materials.insert(id, Material { texture_id: tex_id });
+            }
+
+            if let Some(rb) = entity_data.rigid_body {
+                self.rigid_bodies.insert(id, RigidBody { is_static: rb.is_static, ..RigidBody::default() });
+            }
+
+            if let Some(he) = entity_data.collider_aabb {
+                self.colliders.insert(id, Collider {
+                    half_extents: glam::Vec3::from(he),
+                });
+            }
+
+            if let Some(pl) = entity_data.point_light {
+                self.point_lights.insert(id, PointLight {
+                    color:     glam::Vec3::from(pl.color),
+                    intensity: pl.intensity,
+                });
+            }
+        }
+
+        js_sys::Uint32Array::from(new_ids.as_slice())
+    }
+
+    /// Sérialise la scène courante (toutes les entités) en JSON string.
+    pub fn save_scene(&self) -> String {
+        use scene::{SceneEntityData, SceneData};
+
+        let directional_light = self.directional_light.as_ref().map(|dl| SceneDirectionalLight {
+            direction: dl.direction.to_array(),
+            color:     dl.color.to_array(),
+            intensity: dl.intensity,
+        });
+
+        // Collecter tous les IDs d'entités uniques
+        let all_ids: HashSet<usize> = self.transforms.iter().map(|(id, _)| id)
+            .chain(self.mesh_renderers.iter().map(|(id, _)| id))
+            .chain(self.materials.iter().map(|(id, _)| id))
+            .chain(self.rigid_bodies.iter().map(|(id, _)| id))
+            .chain(self.colliders.iter().map(|(id, _)| id))
+            .chain(self.point_lights.iter().map(|(id, _)| id))
+            .collect();
+
+        // Trouver le nom de texture inverse (TextureId → nom)
+        let id_to_name: HashMap<u32, String> = self.texture_registry
+            .iter()
+            .map(|(name, &id)| (id, name.clone()))
+            .collect();
+
+        let mut entities: Vec<SceneEntityData> = Vec::new();
+        let mut sorted_ids: Vec<usize> = all_ids.into_iter().collect();
+        sorted_ids.sort();
+
+        for id in sorted_ids {
+            let transform = self.transforms.get(id).map(|t| SceneTransform {
+                position: t.position.to_array(),
+                rotation: t.rotation.to_array(),
+                scale:    t.scale.to_array(),
+            });
+            let mesh_renderer = if self.mesh_renderers.get(id).is_some() { Some(true) } else { None };
+            let material = self.materials.get(id).map(|m| SceneMaterial {
+                texture: id_to_name.get(&m.texture_id).cloned().unwrap_or_default(),
+            });
+            let rigid_body = self.rigid_bodies.get(id).map(|rb| SceneRigidBody {
+                is_static: rb.is_static,
+            });
+            let collider_aabb = self.colliders.get(id).map(|c| c.half_extents.to_array());
+            let point_light = self.point_lights.get(id).map(|pl| ScenePointLight {
+                color:     pl.color.to_array(),
+                intensity: pl.intensity,
+            });
+
+            entities.push(SceneEntityData {
+                transform, mesh_renderer, material, rigid_body, collider_aabb, point_light,
+            });
+        }
+
+        let scene = SceneData { directional_light, entities };
+        serde_json::to_string_pretty(&scene).unwrap_or_default()
     }
 }
 
