@@ -8,35 +8,35 @@
     {
       "transform": { "position": [0, -0.5, 0], "rotation": [0, 0, 0], "scale": [20, 1, 20] },
       "mesh_renderer": true,
-      "material": { "texture": "floor_checker" },
+      "material": { "texture": "floor_checker", "metallic": 0.0, "roughness": 0.7 },
       "rigid_body": { "is_static": true },
       "collider_aabb": [10, 0.5, 10]
     },
     {
       "transform": { "position": [0, 0.5, 5], "rotation": [0, 45, 0], "scale": [1, 1, 1] },
       "mesh_renderer": true,
-      "material": { "texture": "box_checker" },
+      "material": { "texture": "box_checker", "metallic": 1.0, "roughness": 0.1 },
       "rigid_body": { "is_static": true },
       "collider_aabb": [0.5, 0.5, 0.5]
     },
     {
       "transform": { "position": [0, 0.5, -5], "rotation": [0, 45, 0], "scale": [1, 1, 1] },
       "mesh_renderer": true,
-      "material": { "texture": "box_checker" },
+      "material": { "texture": "box_checker", "metallic": 0.0, "roughness": 0.5 },
       "rigid_body": { "is_static": true },
       "collider_aabb": [0.5, 0.5, 0.5]
     },
     {
       "transform": { "position": [5, 0.5, 0], "rotation": [0, 45, 0], "scale": [1, 1, 1] },
       "mesh_renderer": true,
-      "material": { "texture": "box_checker" },
+      "material": { "texture": "box_checker", "metallic": 1.0, "roughness": 0.4 },
       "rigid_body": { "is_static": true },
       "collider_aabb": [0.5, 0.5, 0.5]
     },
     {
       "transform": { "position": [-5, 0.5, 0], "rotation": [0, 45, 0], "scale": [1, 1, 1] },
       "mesh_renderer": true,
-      "material": { "texture": "box_checker" },
+      "material": { "texture": "box_checker", "metallic": 0.0, "roughness": 0.2 },
       "rigid_body": { "is_static": true },
       "collider_aabb": [0.5, 0.5, 0.5]
     },
