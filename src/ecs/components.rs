@@ -30,3 +30,23 @@ pub struct MeshRenderer {
 pub struct Material {
     pub texture_id: u32,
 }
+
+// ── RigidBody ───────────────────────────────────────────────────────────────
+
+pub struct RigidBody {
+    pub velocity:  Vec3,
+    pub is_static: bool,   // true = entité fixe (sol, murs) — pas d'intégration
+    pub on_ground: bool,   // mis à jour par PhysicsSystem chaque frame
+}
+
+impl Default for RigidBody {
+    fn default() -> Self {
+        RigidBody { velocity: Vec3::ZERO, is_static: false, on_ground: false }
+    }
+}
+
+// ── Collider AABB ───────────────────────────────────────────────────────────
+
+pub struct Collider {
+    pub half_extents: Vec3,  // demi-dimensions ; centre = Transform.position
+}
