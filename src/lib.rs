@@ -169,8 +169,9 @@ fn aabb_mtv(
         return None;
     }
 
-    // Axe de pénétration minimale — MTV à soustraire de A pour sortir de B
-    // Convention : sign = opposé à diff (B est de ce côté → on pousse A dans l'autre)
+    // Axe de pénétration minimale — MTV à soustraire de la position de A pour sortir de B.
+    // Convention : sign = même sens que diff (B est dans cette direction).
+    // Soustraire le MTV de A → A s'éloigne de B.
     if ox < oy && ox < oz {
         Some(glam::Vec3::new(if diff.x > 0.0 { ox } else { -ox }, 0.0, 0.0))
     } else if oy < oz {
@@ -635,28 +636,32 @@ impl World {
         for &id in &dynamic_ids {
             let Some(rb) = self.rigid_bodies.get_mut(id) else { continue };
 
-            // Gravité
+            // Gravité (toutes entités dynamiques)
+            // Le saut écrase velocity.y par une valeur absolue → l'ordre est sans impact.
             rb.velocity.y -= GRAVITY * dt;
 
-            // WASD → XZ (ré-écrit chaque frame pour un contrôle net sans glissance)
-            let mut move_dir = glam::Vec3::ZERO;
-            if keys & (1 << 0) != 0 { move_dir += forward_xz; }
-            if keys & (1 << 1) != 0 { move_dir -= forward_xz; }
-            if keys & (1 << 2) != 0 { move_dir -= right_xz;   }
-            if keys & (1 << 3) != 0 { move_dir += right_xz;   }
+            // Input WASD + saut : uniquement pour l'entité joueur désignée
+            if self.player_entity == Some(id) {
+                // WASD → XZ (ré-écrit chaque frame pour un contrôle net sans glissance)
+                let mut move_dir = glam::Vec3::ZERO;
+                if keys & (1 << 0) != 0 { move_dir += forward_xz; }
+                if keys & (1 << 1) != 0 { move_dir -= forward_xz; }
+                if keys & (1 << 2) != 0 { move_dir -= right_xz;   }
+                if keys & (1 << 3) != 0 { move_dir += right_xz;   }
 
-            if move_dir.length_squared() > 0.0 {
-                let d = move_dir.normalize();
-                rb.velocity.x = d.x * SPEED;
-                rb.velocity.z = d.z * SPEED;
-            } else {
-                rb.velocity.x = 0.0;
-                rb.velocity.z = 0.0;
-            }
+                if move_dir.length_squared() > 0.0 {
+                    let d = move_dir.normalize();
+                    rb.velocity.x = d.x * SPEED;
+                    rb.velocity.z = d.z * SPEED;
+                } else {
+                    rb.velocity.x = 0.0;
+                    rb.velocity.z = 0.0;
+                }
 
-            // Saut (on lit on_ground avant de le remettre à false)
-            if keys & (1 << 4) != 0 && rb.on_ground {
-                rb.velocity.y = JUMP_VEL;
+                // Saut (on lit on_ground avant de le remettre à false)
+                if keys & (1 << 4) != 0 && rb.on_ground {
+                    rb.velocity.y = JUMP_VEL;
+                }
             }
 
             // Reset on_ground — rétabli par AABB si collision sol détectée
@@ -682,6 +687,7 @@ impl World {
             if let Some(tr) = self.transforms.get(pid) {
                 let eye   = tr.position + glam::Vec3::new(0.0, 1.6, 0.0);
                 let pitch = self.camera_pitch;
+                // Magnitude est 1 par construction ; .normalize() protège contre l'arrondi f32 à pitch extrême.
                 let fwd   = glam::Vec3::new(
                     pitch.cos() * yaw.sin(),
                     pitch.sin(),
