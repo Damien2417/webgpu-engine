@@ -910,3 +910,24 @@ impl World {
         });
     }
 }
+
+#[wasm_bindgen]
+impl World {
+    // ── Scènes ───────────────────────────────────────────────────────────────
+
+    /// Enregistre un TextureId GPU sous un nom string.
+    /// Appeler avant load_scene() pour que les textures nommées soient résolvables.
+    pub fn register_texture(&mut self, name: String, texture_id: u32) {
+        self.texture_registry.insert(name, texture_id);
+    }
+
+    /// Marque (ou démarque) une entité comme persistante.
+    /// Les entités persistantes survivent aux appels à load_scene().
+    pub fn set_persistent(&mut self, id: usize, persistent: bool) {
+        if persistent {
+            self.persistent_entities.insert(id);
+        } else {
+            self.persistent_entities.remove(&id);
+        }
+    }
+}
