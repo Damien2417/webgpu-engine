@@ -84,6 +84,21 @@ world.add_rigid_body(player, false);
 world.add_collider_aabb(player, 0.3, 0.9, 0.3);
 world.set_player(player);
 
+// ── Éclairage ──────────────────────────────────────────────────────────────
+
+// Lumière directionnelle (soleil oblique, légèrement chaud)
+world.add_directional_light(-0.5, -1.0, -0.3,  1.0, 0.95, 0.8,  1.2);
+
+// Point light cyan (coin positif)
+const lamp1 = world.create_entity();
+world.add_transform(lamp1, 4, 2.5, 4);
+world.add_point_light(lamp1, 0.3, 0.8, 1.0, 10.0);
+
+// Point light orange (coin négatif)
+const lamp2 = world.create_entity();
+world.add_transform(lamp2, -4, 2.5, -4);
+world.add_point_light(lamp2, 1.0, 0.4, 0.2, 10.0);
+
 // ── Input ─────────────────────────────────────────────────────────────────
 let keysMask   = 0;
 let mouseDxAcc = 0;
