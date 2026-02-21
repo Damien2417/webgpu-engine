@@ -3,6 +3,7 @@
 mod camera;
 mod ecs;
 mod mesh;
+mod scene;
 
 use camera::Camera;
 use ecs::{Collider, Material, MeshRenderer, MeshType, PointLight, RigidBody, SparseSet, Transform};
