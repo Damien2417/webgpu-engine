@@ -3,7 +3,7 @@ import init, { World } from '../../engine-core/pkg/engine_core.js';
 await init();
 
 // ── Canvas + WebGPU ───────────────────────────────────────────────────────
-const canvas = document.getElementById('game-canvas') as HTMLCanvasElement;
+const canvas = document.getElementById('game-canvas') as HTMLCanvasElement | null;
 if (!canvas) throw new Error('Canvas #game-canvas introuvable');
 
 let world: World;
@@ -24,7 +24,7 @@ const KEY_SPACE = 1 << 4;
 
 // ── Générateur de texture damier ──────────────────────────────────────────
 function makeChecker(
-  world: World,
+  w: World,
   size: number,
   c1: [number, number, number],
   c2: [number, number, number]
@@ -37,7 +37,7 @@ function makeChecker(
       data[i] = r; data[i + 1] = g; data[i + 2] = b; data[i + 3] = 255;
     }
   }
-  return world.upload_texture(size, size, data);
+  return w.upload_texture(size, size, data);
 }
 
 const floorTex = makeChecker(world, 8, [180, 180, 180], [60, 60, 60]);
@@ -129,6 +129,11 @@ document.body.appendChild(overlay);
 
 document.addEventListener('pointerlockchange', () => {
   overlay.style.display = document.pointerLockElement === canvas ? 'none' : 'flex';
+});
+
+document.addEventListener('pointerlockerror', () => {
+  overlay.textContent = 'Pointer Lock refusé — réessayez ou vérifiez les permissions du navigateur.';
+  overlay.style.display = 'flex';
 });
 
 // ── Boucle de jeu ─────────────────────────────────────────────────────────
