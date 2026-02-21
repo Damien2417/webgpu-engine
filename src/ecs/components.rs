@@ -41,7 +41,11 @@ pub struct RigidBody {
 
 impl Default for RigidBody {
     fn default() -> Self {
-        RigidBody { velocity: Vec3::ZERO, is_static: false, on_ground: false }
+        RigidBody {
+            velocity:  Vec3::ZERO,
+            is_static: false,
+            on_ground: false,
+        }
     }
 }
 
