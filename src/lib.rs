@@ -509,7 +509,7 @@ impl World {
 
         let uniform_buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
             label:              Some("entity_uniform"),
-            size:               std::mem::size_of::<Mat4>() as u64,
+            size:               std::mem::size_of::<EntityUniforms>() as u64,
             usage:              wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
@@ -826,5 +826,34 @@ impl World {
                 self.camera.target = eye + fwd;
             }
         }
+    }
+}
+
+#[wasm_bindgen]
+impl World {
+    // ── Éclairage ────────────────────────────────────────────────────────────
+
+    /// Ajoute une point light attachée à l'entité (doit avoir un Transform).
+    /// Couleur (r, g, b) entre 0.0 et 1.0, intensity en lux (ex: 5.0–20.0).
+    pub fn add_point_light(&mut self, id: usize, r: f32, g: f32, b: f32, intensity: f32) {
+        self.point_lights.insert(id, PointLight {
+            color:     glam::Vec3::new(r, g, b),
+            intensity,
+        });
+    }
+
+    /// Définit la lumière directionnelle (soleil). Un seul appel suffit.
+    /// direction (dx, dy, dz) : vecteur vers lequel la lumière pointe (normalisé automatiquement).
+    pub fn add_directional_light(
+        &mut self,
+        dx: f32, dy: f32, dz: f32,
+        r: f32, g: f32, b: f32,
+        intensity: f32,
+    ) {
+        self.directional_light = Some(DirectionalLightData {
+            direction: glam::Vec3::new(dx, dy, dz),
+            color:     glam::Vec3::new(r, g, b),
+            intensity,
+        });
     }
 }
