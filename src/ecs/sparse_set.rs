@@ -68,4 +68,28 @@ impl<T> SparseSet<T> {
         debug_assert_eq!(self.ids.len(), self.dense.len(), "ids/dense désynchronisés");
         self.ids.iter().copied().zip(self.dense.iter())
     }
+
+    /// Supprime le composant pour `id`. Retourne true si existait.
+    /// Utilise swap-remove : O(1), réordonne les éléments dense.
+    pub fn remove(&mut self, id: usize) -> bool {
+        if id >= self.sparse.len() || self.sparse[id] == EMPTY {
+            return false;
+        }
+        let idx      = self.sparse[id];
+        let last_idx = self.dense.len() - 1;
+
+        // Swap-remove dans dense + ids
+        self.dense.swap_remove(idx);
+        self.ids.swap_remove(idx);
+
+        // L'élément qui était au dernier slot est maintenant à idx
+        // → mettre à jour son entrée sparse (sauf si on a supprimé le dernier)
+        if idx <= last_idx && idx < self.ids.len() {
+            let moved_id = self.ids[idx];
+            self.sparse[moved_id] = idx;
+        }
+
+        self.sparse[id] = EMPTY;
+        true
+    }
 }
