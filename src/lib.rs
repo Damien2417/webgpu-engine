@@ -152,6 +152,34 @@ fn create_texture_from_data(
     TextureGpu { texture, view, bind_group }
 }
 
+/// Calcule le MTV pour séparer A de B (à soustraire de la position de A).
+/// Retourne None si pas de chevauchement.
+fn aabb_mtv(
+    center_a: glam::Vec3, he_a: glam::Vec3,
+    center_b: glam::Vec3, he_b: glam::Vec3,
+) -> Option<glam::Vec3> {
+    let diff   = center_b - center_a;
+    let sum_he = he_a + he_b;
+
+    let ox = sum_he.x - diff.x.abs();
+    let oy = sum_he.y - diff.y.abs();
+    let oz = sum_he.z - diff.z.abs();
+
+    if ox <= 0.0 || oy <= 0.0 || oz <= 0.0 {
+        return None;
+    }
+
+    // Axe de pénétration minimale — MTV à soustraire de A pour sortir de B
+    // Convention : sign = opposé à diff (B est de ce côté → on pousse A dans l'autre)
+    if ox < oy && ox < oz {
+        Some(glam::Vec3::new(if diff.x > 0.0 { ox } else { -ox }, 0.0, 0.0))
+    } else if oy < oz {
+        Some(glam::Vec3::new(0.0, if diff.y > 0.0 { oy } else { -oy }, 0.0))
+    } else {
+        Some(glam::Vec3::new(0.0, 0.0, if diff.z > 0.0 { oz } else { -oz }))
+    }
+}
+
 #[wasm_bindgen]
 impl World {
     pub async fn new(canvas: HtmlCanvasElement) -> Result<World, JsValue> {
@@ -574,5 +602,94 @@ impl World {
         self.input.keys     = keys;
         self.input.mouse_dx = mouse_dx;
         self.input.mouse_dy = mouse_dy;
+    }
+
+    /// Met à jour la physique et la caméra FPS. Appeler avant render_frame().
+    pub fn update(&mut self, delta_ms: f32) {
+        let dt = (delta_ms / 1000.0_f32).min(0.05); // cap 50 ms anti-spiral
+
+        const GRAVITY:   f32 = 9.8;
+        const SPEED:     f32 = 5.0;
+        const JUMP_VEL:  f32 = 5.0;
+        const MOUSE_SEN: f32 = 0.002; // radians/pixel
+
+        // ── 1. Rotation caméra ───────────────────────────────────────────────
+        self.camera_yaw   += self.input.mouse_dx * MOUSE_SEN;
+        self.camera_pitch -= self.input.mouse_dy * MOUSE_SEN;
+        self.camera_pitch  = self.camera_pitch
+            .clamp(-89.0_f32.to_radians(), 89.0_f32.to_radians());
+
+        let yaw        = self.camera_yaw;
+        let forward_xz = glam::Vec3::new(yaw.sin(), 0.0, -yaw.cos());
+        let right_xz   = glam::Vec3::new(yaw.cos(), 0.0,  yaw.sin());
+        let keys       = self.input.keys;
+
+        // ── 2. Gravité + input → velocity ────────────────────────────────────
+        // Collecte des IDs dynamiques (évite double-borrow sur self.rigid_bodies)
+        let dynamic_ids: Vec<usize> = self.rigid_bodies
+            .iter()
+            .filter(|(_, rb)| !rb.is_static)
+            .map(|(id, _)| id)
+            .collect();
+
+        for &id in &dynamic_ids {
+            let Some(rb) = self.rigid_bodies.get_mut(id) else { continue };
+
+            // Gravité
+            rb.velocity.y -= GRAVITY * dt;
+
+            // WASD → XZ (ré-écrit chaque frame pour un contrôle net sans glissance)
+            let mut move_dir = glam::Vec3::ZERO;
+            if keys & (1 << 0) != 0 { move_dir += forward_xz; }
+            if keys & (1 << 1) != 0 { move_dir -= forward_xz; }
+            if keys & (1 << 2) != 0 { move_dir -= right_xz;   }
+            if keys & (1 << 3) != 0 { move_dir += right_xz;   }
+
+            if move_dir.length_squared() > 0.0 {
+                let d = move_dir.normalize();
+                rb.velocity.x = d.x * SPEED;
+                rb.velocity.z = d.z * SPEED;
+            } else {
+                rb.velocity.x = 0.0;
+                rb.velocity.z = 0.0;
+            }
+
+            // Saut (on lit on_ground avant de le remettre à false)
+            if keys & (1 << 4) != 0 && rb.on_ground {
+                rb.velocity.y = JUMP_VEL;
+            }
+
+            // Reset on_ground — rétabli par AABB si collision sol détectée
+            rb.on_ground = false;
+        }
+
+        // ── 3. Intégration Euler ─────────────────────────────────────────────
+        for &id in &dynamic_ids {
+            let vel = match self.rigid_bodies.get(id) {
+                Some(rb) => rb.velocity,
+                None     => continue,
+            };
+            if let Some(tr) = self.transforms.get_mut(id) {
+                tr.position += vel * dt;
+            }
+        }
+
+        // ── 4. Résolution AABB ───────────────────────────────────────────────
+        // (implémenté dans Task 5 — placeholder)
+
+        // ── 5. Caméra FPS ────────────────────────────────────────────────────
+        if let Some(pid) = self.player_entity {
+            if let Some(tr) = self.transforms.get(pid) {
+                let eye   = tr.position + glam::Vec3::new(0.0, 1.6, 0.0);
+                let pitch = self.camera_pitch;
+                let fwd   = glam::Vec3::new(
+                    pitch.cos() * yaw.sin(),
+                    pitch.sin(),
+                    -pitch.cos() * yaw.cos(),
+                ).normalize();
+                self.camera.eye    = eye;
+                self.camera.target = eye + fwd;
+            }
+        }
     }
 }
