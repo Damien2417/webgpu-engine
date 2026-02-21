@@ -582,7 +582,7 @@ impl World {
             &wgpu::CommandEncoderDescriptor { label: Some("render_encoder") }
         );
 
-        // Upload MVP pour chaque entité avec Transform + MeshRenderer
+        // Upload EntityUniforms (MVP + Model) pour chaque entité avec Transform + MeshRenderer
         for (id, transform) in self.transforms.iter() {
             if self.mesh_renderers.get(id).is_none() { continue; }
             let Some(gpu) = self.entity_gpus.get(id) else { continue };
@@ -597,7 +597,50 @@ impl World {
                 * Mat4::from_scale(transform.scale);
 
             let mvp = proj_mat * view_mat * model;
-            self.queue.write_buffer(&gpu.uniform_buffer, 0, bytemuck::bytes_of(&mvp));
+
+            let uniforms = EntityUniforms {
+                mvp:   mvp.to_cols_array_2d(),
+                model: model.to_cols_array_2d(),
+            };
+            self.queue.write_buffer(&gpu.uniform_buffer, 0, bytemuck::bytes_of(&uniforms));
+        }
+
+        // ── Upload LightUniforms (Group 2) ───────────────────────────────────
+        {
+            let mut lu = <LightUniforms as bytemuck::Zeroable>::zeroed();
+            lu.camera_pos = [
+                self.camera.eye.x, self.camera.eye.y, self.camera.eye.z, 0.0,
+            ];
+
+            if let Some(dl) = &self.directional_light {
+                let dir = dl.direction.normalize();
+                lu.directional = GpuDirectionalLight {
+                    direction: dir.to_array(),
+                    _p0: 0.0,
+                    color: dl.color.to_array(),
+                    intensity: dl.intensity,
+                };
+            }
+
+            let mut n = 0usize;
+            let light_ids: Vec<usize> = self.point_lights
+                .iter()
+                .map(|(id, _)| id)
+                .collect();
+            for id in light_ids {
+                if n >= 8 { break; }
+                let (Some(pl), Some(tr)) = (self.point_lights.get(id), self.transforms.get(id)) else { continue };
+                lu.points[n] = GpuPointLight {
+                    position:  tr.position.to_array(),
+                    _p0: 0.0,
+                    color:     pl.color.to_array(),
+                    intensity: pl.intensity,
+                };
+                n += 1;
+            }
+            lu.n_points = n as u32;
+
+            self.queue.write_buffer(&self.light_buffer, 0, bytemuck::bytes_of(&lu));
         }
 
         {
@@ -649,6 +692,7 @@ impl World {
 
                 pass.set_bind_group(0, &gpu.bind_group, &[]);
                 pass.set_bind_group(1, tex_bg, &[]);
+                pass.set_bind_group(2, &self.light_bind_group, &[]);
                 pass.draw_indexed(0..36, 0, 0..1);
             }
         }
