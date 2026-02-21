@@ -6,6 +6,9 @@ await init();
 const canvas = document.getElementById('game-canvas') as HTMLCanvasElement | null;
 if (!canvas) throw new Error('Canvas #game-canvas introuvable');
 
+canvas.width  = window.innerWidth;
+canvas.height = window.innerHeight;
+
 let world: World;
 try {
   world = await World.new(canvas);
