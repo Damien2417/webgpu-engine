@@ -147,6 +147,7 @@ pub struct World {
     // Scènes
     persistent_entities: HashSet<usize>,
     texture_registry:    HashMap<String, u32>,
+    entity_names:        HashMap<usize, String>,
 }
 
 fn create_depth_texture(
@@ -690,6 +691,7 @@ impl World {
             shadow_entity_layout,
             persistent_entities: HashSet::new(),
             texture_registry:    HashMap::new(),
+            entity_names:        HashMap::new(),
         })
     }
 }
@@ -702,6 +704,65 @@ impl World {
         let id = self.next_id;
         self.next_id += 1;
         id
+    }
+
+    // ── API Éditeur ───────────────────────────────────────────────────────────
+
+    /// Retourne le nom de l'entité (défaut: "Entity {id}").
+    pub fn get_entity_name(&self, id: usize) -> String {
+        self.entity_names
+            .get(&id)
+            .cloned()
+            .unwrap_or_else(|| format!("Entity {}", id))
+    }
+
+    /// Définit le nom d'une entité.
+    pub fn set_entity_name(&mut self, id: usize, name: String) {
+        self.entity_names.insert(id, name);
+    }
+
+    /// Supprime une entité et tous ses composants.
+    pub fn remove_entity(&mut self, id: usize) {
+        self.transforms.remove(id);
+        self.mesh_renderers.remove(id);
+        self.materials.remove(id);
+        self.rigid_bodies.remove(id);
+        self.colliders.remove(id);
+        self.point_lights.remove(id);
+        self.entity_gpus.remove(id);
+        self.entity_names.remove(&id);
+        self.persistent_entities.remove(&id);
+    }
+
+    /// Liste les IDs de toutes les entités qui ont un Transform.
+    pub fn get_entity_ids(&self) -> js_sys::Uint32Array {
+        let ids: Vec<u32> = self.transforms
+            .iter_ids()
+            .map(|id| id as u32)
+            .collect();
+        js_sys::Uint32Array::from(ids.as_slice())
+    }
+
+    /// Retourne [px, py, pz, rx, ry, rz, sx, sy, sz] pour l'entité.
+    /// Retourne 9 zéros si l'entité n'a pas de Transform.
+    pub fn get_transform_array(&self, id: usize) -> js_sys::Float32Array {
+        if let Some(t) = self.transforms.get(id) {
+            let data = [
+                t.position.x, t.position.y, t.position.z,
+                t.rotation.x, t.rotation.y, t.rotation.z,
+                t.scale.x,    t.scale.y,    t.scale.z,
+            ];
+            js_sys::Float32Array::from(data.as_slice())
+        } else {
+            js_sys::Float32Array::from([0f32; 9].as_slice())
+        }
+    }
+
+    /// Retourne la matrice view*proj [16 f32, column-major] pour les gizmos.
+    pub fn get_view_proj(&self) -> js_sys::Float32Array {
+        let aspect = self.config.width as f32 / self.config.height as f32;
+        let vp = self.camera.proj_matrix(aspect) * self.camera.view_matrix();
+        js_sys::Float32Array::from(vp.to_cols_array().as_slice())
     }
 
     // ── Transform ────────────────────────────────────────────────────────────

@@ -44,6 +44,23 @@ export class World {
      */
     create_entity(): number;
     /**
+     * Liste les IDs de toutes les entités qui ont un Transform.
+     */
+    get_entity_ids(): Uint32Array;
+    /**
+     * Retourne le nom de l'entité (défaut: "Entity {id}").
+     */
+    get_entity_name(id: number): string;
+    /**
+     * Retourne [px, py, pz, rx, ry, rz, sx, sy, sz] pour l'entité.
+     * Retourne 9 zéros si l'entité n'a pas de Transform.
+     */
+    get_transform_array(id: number): Float32Array;
+    /**
+     * Retourne la matrice view*proj [16 f32, column-major] pour les gizmos.
+     */
+    get_view_proj(): Float32Array;
+    /**
      * Charge une scène depuis un JSON string.
      * Supprime les entités non-persistantes, puis crée les entités du JSON.
      * Retourne un Uint32Array des IDs des nouvelles entités créées.
@@ -55,6 +72,10 @@ export class World {
      * Appeler avant load_scene() pour que les textures nommées soient résolvables.
      */
     register_texture(name: string, texture_id: number): void;
+    /**
+     * Supprime une entité et tous ses composants.
+     */
+    remove_entity(id: number): void;
     render_frame(_delta_ms: number): void;
     /**
      * Sérialise la scène courante (toutes les entités) en JSON string.
@@ -67,6 +88,10 @@ export class World {
      * ici cela garantit juste une couleur très vive.
      */
     set_emissive(entity_id: number, r: number, g: number, b: number): void;
+    /**
+     * Définit le nom d'une entité.
+     */
+    set_entity_name(id: number, name: string): void;
     /**
      * Transmet l'état input du frame courant.
      * `keys` bitmask : bit0=W, bit1=S, bit2=A, bit3=D, bit4=SPACE.
@@ -114,13 +139,19 @@ export interface InitOutput {
     readonly world_add_rigid_body: (a: number, b: number, c: number) => void;
     readonly world_add_transform: (a: number, b: number, c: number, d: number, e: number) => void;
     readonly world_create_entity: (a: number) => number;
+    readonly world_get_entity_ids: (a: number) => any;
+    readonly world_get_entity_name: (a: number, b: number) => [number, number];
+    readonly world_get_transform_array: (a: number, b: number) => any;
+    readonly world_get_view_proj: (a: number) => any;
     readonly world_load_scene: (a: number, b: number, c: number) => any;
     readonly world_new: (a: any) => any;
     readonly world_register_texture: (a: number, b: number, c: number, d: number) => void;
+    readonly world_remove_entity: (a: number, b: number) => void;
     readonly world_render_frame: (a: number, b: number) => void;
     readonly world_save_scene: (a: number) => [number, number];
     readonly world_set_camera: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => void;
     readonly world_set_emissive: (a: number, b: number, c: number, d: number, e: number) => void;
+    readonly world_set_entity_name: (a: number, b: number, c: number, d: number) => void;
     readonly world_set_input: (a: number, b: number, c: number, d: number) => void;
     readonly world_set_normal_map: (a: number, b: number, c: number) => void;
     readonly world_set_persistent: (a: number, b: number, c: number) => void;

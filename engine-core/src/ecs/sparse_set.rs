@@ -69,6 +69,11 @@ impl<T> SparseSet<T> {
         self.ids.iter().copied().zip(self.dense.iter())
     }
 
+    /// Itère sur tous les IDs d'entités présents dans ce SparseSet.
+    pub fn iter_ids(&self) -> impl Iterator<Item = usize> + '_ {
+        self.ids.iter().copied()
+    }
+
     /// Supprime le composant pour `id`. Retourne true si existait.
     /// Utilise swap-remove : O(1), réordonne les éléments dense.
     pub fn remove(&mut self, id: usize) -> bool {

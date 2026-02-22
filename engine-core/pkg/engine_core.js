@@ -106,6 +106,49 @@ export class World {
         return ret >>> 0;
     }
     /**
+     * Liste les IDs de toutes les entités qui ont un Transform.
+     * @returns {Uint32Array}
+     */
+    get_entity_ids() {
+        const ret = wasm.world_get_entity_ids(this.__wbg_ptr);
+        return ret;
+    }
+    /**
+     * Retourne le nom de l'entité (défaut: "Entity {id}").
+     * @param {number} id
+     * @returns {string}
+     */
+    get_entity_name(id) {
+        let deferred1_0;
+        let deferred1_1;
+        try {
+            const ret = wasm.world_get_entity_name(this.__wbg_ptr, id);
+            deferred1_0 = ret[0];
+            deferred1_1 = ret[1];
+            return getStringFromWasm0(ret[0], ret[1]);
+        } finally {
+            wasm.__wbindgen_free(deferred1_0, deferred1_1, 1);
+        }
+    }
+    /**
+     * Retourne [px, py, pz, rx, ry, rz, sx, sy, sz] pour l'entité.
+     * Retourne 9 zéros si l'entité n'a pas de Transform.
+     * @param {number} id
+     * @returns {Float32Array}
+     */
+    get_transform_array(id) {
+        const ret = wasm.world_get_transform_array(this.__wbg_ptr, id);
+        return ret;
+    }
+    /**
+     * Retourne la matrice view*proj [16 f32, column-major] pour les gizmos.
+     * @returns {Float32Array}
+     */
+    get_view_proj() {
+        const ret = wasm.world_get_view_proj(this.__wbg_ptr);
+        return ret;
+    }
+    /**
      * Charge une scène depuis un JSON string.
      * Supprime les entités non-persistantes, puis crée les entités du JSON.
      * Retourne un Uint32Array des IDs des nouvelles entités créées.
@@ -136,6 +179,13 @@ export class World {
         const ptr0 = passStringToWasm0(name, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
         const len0 = WASM_VECTOR_LEN;
         wasm.world_register_texture(this.__wbg_ptr, ptr0, len0, texture_id);
+    }
+    /**
+     * Supprime une entité et tous ses composants.
+     * @param {number} id
+     */
+    remove_entity(id) {
+        wasm.world_remove_entity(this.__wbg_ptr, id);
     }
     /**
      * @param {number} _delta_ms
@@ -181,6 +231,16 @@ export class World {
      */
     set_emissive(entity_id, r, g, b) {
         wasm.world_set_emissive(this.__wbg_ptr, entity_id, r, g, b);
+    }
+    /**
+     * Définit le nom d'une entité.
+     * @param {number} id
+     * @param {string} name
+     */
+    set_entity_name(id, name) {
+        const ptr0 = passStringToWasm0(name, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        wasm.world_set_entity_name(this.__wbg_ptr, id, ptr0, len0);
     }
     /**
      * Transmet l'état input du frame courant.
@@ -513,6 +573,10 @@ function __wbg_get_imports() {
             } finally {
                 state0.a = state0.b = 0;
             }
+        },
+        __wbg_new_from_slice_132ef6dc5072cf68: function(arg0, arg1) {
+            const ret = new Float32Array(getArrayF32FromWasm0(arg0, arg1));
+            return ret;
         },
         __wbg_new_from_slice_19d21922ff3c0ae6: function(arg0, arg1) {
             const ret = new Uint32Array(getArrayU32FromWasm0(arg0, arg1));
@@ -1337,6 +1401,11 @@ function debugString(val) {
     return className;
 }
 
+function getArrayF32FromWasm0(ptr, len) {
+    ptr = ptr >>> 0;
+    return getFloat32ArrayMemory0().subarray(ptr / 4, ptr / 4 + len);
+}
+
 function getArrayU32FromWasm0(ptr, len) {
     ptr = ptr >>> 0;
     return getUint32ArrayMemory0().subarray(ptr / 4, ptr / 4 + len);
@@ -1353,6 +1422,14 @@ function getDataViewMemory0() {
         cachedDataViewMemory0 = new DataView(wasm.memory.buffer);
     }
     return cachedDataViewMemory0;
+}
+
+let cachedFloat32ArrayMemory0 = null;
+function getFloat32ArrayMemory0() {
+    if (cachedFloat32ArrayMemory0 === null || cachedFloat32ArrayMemory0.byteLength === 0) {
+        cachedFloat32ArrayMemory0 = new Float32Array(wasm.memory.buffer);
+    }
+    return cachedFloat32ArrayMemory0;
 }
 
 function getStringFromWasm0(ptr, len) {
@@ -1495,6 +1572,7 @@ function __wbg_finalize_init(instance, module) {
     wasm = instance.exports;
     wasmModule = module;
     cachedDataViewMemory0 = null;
+    cachedFloat32ArrayMemory0 = null;
     cachedUint32ArrayMemory0 = null;
     cachedUint8ArrayMemory0 = null;
     wasm.__wbindgen_start();
