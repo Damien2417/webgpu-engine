@@ -16,7 +16,9 @@ impl Default for Transform {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Default)]
 pub enum MeshType {
+    #[default]
     Cube,
     Plane,
 }
