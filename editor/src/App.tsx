@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useEffect } from 'react';
+import { useEditorStore } from './store/editorStore';
 import MenuBar from './components/MenuBar/MenuBar';
 import Toolbar from './components/Toolbar/Toolbar';
 import SceneGraph from './components/SceneGraph/SceneGraph';
@@ -33,6 +34,18 @@ const styles: Record<string, React.CSSProperties> = {
 };
 
 export default function App() {
+  const { setGizmoMode, isPlaying } = useEditorStore();
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (isPlaying || e.target instanceof HTMLInputElement) return;
+      if (e.key === 'w' || e.key === 'W') setGizmoMode('translate');
+      if (e.key === 'e' || e.key === 'E') setGizmoMode('rotate');
+      if (e.key === 'r' || e.key === 'R') setGizmoMode('scale');
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [isPlaying, setGizmoMode]);
+
   return (
     <div style={styles.root}>
       <div style={styles.menubar}><MenuBar /></div>
