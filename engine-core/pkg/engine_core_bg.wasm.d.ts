@@ -13,6 +13,7 @@ export const world_add_transform: (a: number, b: number, c: number, d: number, e
 export const world_create_entity: (a: number) => number;
 export const world_get_entity_ids: (a: number) => any;
 export const world_get_entity_name: (a: number, b: number) => [number, number];
+export const world_get_mesh_type: (a: number, b: number) => [number, number];
 export const world_get_transform_array: (a: number, b: number) => any;
 export const world_get_view_proj: (a: number) => any;
 export const world_load_scene: (a: number, b: number, c: number) => any;
@@ -25,6 +26,7 @@ export const world_set_camera: (a: number, b: number, c: number, d: number, e: n
 export const world_set_emissive: (a: number, b: number, c: number, d: number, e: number) => void;
 export const world_set_entity_name: (a: number, b: number, c: number, d: number) => void;
 export const world_set_input: (a: number, b: number, c: number, d: number) => void;
+export const world_set_mesh_type: (a: number, b: number, c: number, d: number) => void;
 export const world_set_normal_map: (a: number, b: number, c: number) => void;
 export const world_set_persistent: (a: number, b: number, c: number) => void;
 export const world_set_player: (a: number, b: number) => void;

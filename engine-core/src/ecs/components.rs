@@ -18,6 +18,7 @@ impl Default for Transform {
 
 pub enum MeshType {
     Cube,
+    Plane,
 }
 
 pub struct MeshRenderer {

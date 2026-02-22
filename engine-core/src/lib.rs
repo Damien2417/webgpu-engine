@@ -9,7 +9,7 @@ use camera::Camera;
 use ecs::{Collider, Material, MeshRenderer, MeshType, PointLight, RigidBody, SparseSet, Transform};
 use scene::{SceneData, SceneDirectionalLight, SceneMaterial, ScenePointLight,
             SceneRigidBody, SceneTransform};
-use mesh::{Vertex, CUBE_INDICES, CUBE_VERTICES};
+use mesh::{Vertex, CUBE_INDICES, CUBE_VERTICES, PLANE_INDICES, PLANE_VERTICES};
 
 use std::collections::{HashMap, HashSet};
 
@@ -835,6 +835,28 @@ impl World {
         });
     }
 
+    /// Change le type de mesh d'une entité existante ("cube" ou "plane").
+    pub fn set_mesh_type(&mut self, id: usize, mesh_type: &str) {
+        let mt = match mesh_type {
+            "plane" => MeshType::Plane,
+            _       => MeshType::Cube,
+        };
+        if let Some(mr) = self.mesh_renderers.get_mut(id) {
+            mr.mesh_type = mt;
+        }
+    }
+
+    /// Retourne le type de mesh d'une entité ("cube" | "plane").
+    pub fn get_mesh_type(&self, id: usize) -> String {
+        match self.mesh_renderers.get(id) {
+            Some(mr) => match mr.mesh_type {
+                MeshType::Cube  => "cube".to_string(),
+                MeshType::Plane => "plane".to_string(),
+            },
+            None => "cube".to_string(),
+        }
+    }
+
     // ── Caméra ───────────────────────────────────────────────────────────────
 
     pub fn set_camera(&mut self, ex: f32, ey: f32, ez: f32, tx: f32, ty: f32, tz: f32) {
@@ -1018,13 +1040,28 @@ impl World {
             });
 
             shadow_pass.set_pipeline(&self.shadow_pipeline);
-            shadow_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
-            shadow_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
 
-            for (id, _) in self.mesh_renderers.iter() {
+            for (id, mr) in self.mesh_renderers.iter() {
                 let Some(gpu) = self.entity_gpus.get(id) else { continue };
+                let (verts, idxs): (&[Vertex], &[u16]) = match mr.mesh_type {
+                    MeshType::Cube  => (CUBE_VERTICES, CUBE_INDICES),
+                    MeshType::Plane => (PLANE_VERTICES, PLANE_INDICES),
+                };
+                let vb = self.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    label:    Some("shadow_vertex_buffer"),
+                    contents: bytemuck::cast_slice(verts),
+                    usage:    wgpu::BufferUsages::VERTEX,
+                });
+                let ib = self.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    label:    Some("shadow_index_buffer"),
+                    contents: bytemuck::cast_slice(idxs),
+                    usage:    wgpu::BufferUsages::INDEX,
+                });
+                let index_count = idxs.len() as u32;
+                shadow_pass.set_vertex_buffer(0, vb.slice(..));
+                shadow_pass.set_index_buffer(ib.slice(..), wgpu::IndexFormat::Uint16);
                 shadow_pass.set_bind_group(0, &gpu.shadow_bind_group, &[]);
-                shadow_pass.draw_indexed(0..36, 0, 0..1);
+                shadow_pass.draw_indexed(0..index_count, 0, 0..1);
             }
         }
 
@@ -1055,11 +1092,25 @@ impl World {
             });
 
             pass.set_pipeline(&self.render_pipeline);
-            pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
-            pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
 
-            for (id, _) in self.mesh_renderers.iter() {
+            for (id, mr) in self.mesh_renderers.iter() {
                 let Some(gpu) = self.entity_gpus.get(id) else { continue };
+
+                let (verts, idxs): (&[Vertex], &[u16]) = match mr.mesh_type {
+                    MeshType::Cube  => (CUBE_VERTICES, CUBE_INDICES),
+                    MeshType::Plane => (PLANE_VERTICES, PLANE_INDICES),
+                };
+                let vb = self.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    label:    Some("vertex_buffer"),
+                    contents: bytemuck::cast_slice(verts),
+                    usage:    wgpu::BufferUsages::VERTEX,
+                });
+                let ib = self.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    label:    Some("index_buffer"),
+                    contents: bytemuck::cast_slice(idxs),
+                    usage:    wgpu::BufferUsages::INDEX,
+                });
+                let index_count = idxs.len() as u32;
 
                 // Group 1 : albedo + normal bind group (créé à la volée)
                 let (albedo_view, normal_view) = if let Some(mat) = self.materials.get(id) {
@@ -1080,11 +1131,13 @@ impl World {
 
                 let tex_bg = self.make_tex_bind_group(albedo_view, normal_view);
 
+                pass.set_vertex_buffer(0, vb.slice(..));
+                pass.set_index_buffer(ib.slice(..), wgpu::IndexFormat::Uint16);
                 pass.set_bind_group(0, &gpu.bind_group, &[]);
                 pass.set_bind_group(1, &tex_bg, &[]);
                 pass.set_bind_group(2, &self.light_bind_group, &[]);
                 pass.set_bind_group(3, &self.shadow_bind_group, &[]);
-                pass.draw_indexed(0..36, 0, 0..1);
+                pass.draw_indexed(0..index_count, 0, 0..1);
             }
         }
 

@@ -131,6 +131,23 @@ export class World {
         }
     }
     /**
+     * Retourne le type de mesh d'une entité ("cube" | "plane").
+     * @param {number} id
+     * @returns {string}
+     */
+    get_mesh_type(id) {
+        let deferred1_0;
+        let deferred1_1;
+        try {
+            const ret = wasm.world_get_mesh_type(this.__wbg_ptr, id);
+            deferred1_0 = ret[0];
+            deferred1_1 = ret[1];
+            return getStringFromWasm0(ret[0], ret[1]);
+        } finally {
+            wasm.__wbindgen_free(deferred1_0, deferred1_1, 1);
+        }
+    }
+    /**
      * Retourne [px, py, pz, rx, ry, rz, sx, sy, sz] pour l'entité.
      * Retourne 9 zéros si l'entité n'a pas de Transform.
      * @param {number} id
@@ -252,6 +269,16 @@ export class World {
      */
     set_input(keys, mouse_dx, mouse_dy) {
         wasm.world_set_input(this.__wbg_ptr, keys, mouse_dx, mouse_dy);
+    }
+    /**
+     * Change le type de mesh d'une entité existante ("cube" ou "plane").
+     * @param {number} id
+     * @param {string} mesh_type
+     */
+    set_mesh_type(id, mesh_type) {
+        const ptr0 = passStringToWasm0(mesh_type, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        wasm.world_set_mesh_type(this.__wbg_ptr, id, ptr0, len0);
     }
     /**
      * Applique une normal map à l'entité (doit avoir un Material).

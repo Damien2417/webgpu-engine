@@ -70,3 +70,13 @@ pub const CUBE_INDICES: &[u16] = &[
     16, 17, 18,  16, 18, 19,
     20, 21, 22,  20, 22, 23,
 ];
+
+/// Plan horizontal XZ centré sur l'origine (face +Y).
+pub const PLANE_VERTICES: &[Vertex] = &[
+    Vertex { position: [-0.5, 0.0, -0.5], color: [0.5, 0.5, 0.5], uv: [0.0, 0.0], normal: [0.0, 1.0, 0.0], tangent: [1.0, 0.0, 0.0, 1.0] },
+    Vertex { position: [ 0.5, 0.0, -0.5], color: [0.5, 0.5, 0.5], uv: [1.0, 0.0], normal: [0.0, 1.0, 0.0], tangent: [1.0, 0.0, 0.0, 1.0] },
+    Vertex { position: [ 0.5, 0.0,  0.5], color: [0.5, 0.5, 0.5], uv: [1.0, 1.0], normal: [0.0, 1.0, 0.0], tangent: [1.0, 0.0, 0.0, 1.0] },
+    Vertex { position: [-0.5, 0.0,  0.5], color: [0.5, 0.5, 0.5], uv: [0.0, 1.0], normal: [0.0, 1.0, 0.0], tangent: [1.0, 0.0, 0.0, 1.0] },
+];
+
+pub const PLANE_INDICES: &[u16] = &[0, 1, 2, 0, 2, 3];

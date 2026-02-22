@@ -52,6 +52,10 @@ export class World {
      */
     get_entity_name(id: number): string;
     /**
+     * Retourne le type de mesh d'une entité ("cube" | "plane").
+     */
+    get_mesh_type(id: number): string;
+    /**
      * Retourne [px, py, pz, rx, ry, rz, sx, sy, sz] pour l'entité.
      * Retourne 9 zéros si l'entité n'a pas de Transform.
      */
@@ -99,6 +103,10 @@ export class World {
      */
     set_input(keys: number, mouse_dx: number, mouse_dy: number): void;
     /**
+     * Change le type de mesh d'une entité existante ("cube" ou "plane").
+     */
+    set_mesh_type(id: number, mesh_type: string): void;
+    /**
      * Applique une normal map à l'entité (doit avoir un Material).
      */
     set_normal_map(entity_id: number, normal_tex_id: number): void;
@@ -141,6 +149,7 @@ export interface InitOutput {
     readonly world_create_entity: (a: number) => number;
     readonly world_get_entity_ids: (a: number) => any;
     readonly world_get_entity_name: (a: number, b: number) => [number, number];
+    readonly world_get_mesh_type: (a: number, b: number) => [number, number];
     readonly world_get_transform_array: (a: number, b: number) => any;
     readonly world_get_view_proj: (a: number) => any;
     readonly world_load_scene: (a: number, b: number, c: number) => any;
@@ -153,6 +162,7 @@ export interface InitOutput {
     readonly world_set_emissive: (a: number, b: number, c: number, d: number, e: number) => void;
     readonly world_set_entity_name: (a: number, b: number, c: number, d: number) => void;
     readonly world_set_input: (a: number, b: number, c: number, d: number) => void;
+    readonly world_set_mesh_type: (a: number, b: number, c: number, d: number) => void;
     readonly world_set_normal_map: (a: number, b: number, c: number) => void;
     readonly world_set_persistent: (a: number, b: number, c: number) => void;
     readonly world_set_player: (a: number, b: number) => void;
