@@ -1,0 +1,18 @@
+:root {
+  --bg-deep:    #1e1e1e;
+  --bg-panel:   #252526;
+  --bg-header:  #2d2d30;
+  --bg-hover:   #3e3e42;
+  --bg-select:  #094771;
+  --border:     #3f3f46;
+  --text:       #cccccc;
+  --text-dim:   #858585;
+  --accent:     #4fc3f7;
+  --accent-dim: #0288d1;
+  --red:        #f44747;
+  --green:      #4ec9b0;
+  --blue:       #569cd6;
+  --yellow:     #dcdcaa;
+  --font-size:  12px;
+  --font-mono:  'Consolas', monospace;
+}
