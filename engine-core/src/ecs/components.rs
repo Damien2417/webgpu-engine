@@ -26,9 +26,13 @@ pub struct MeshRenderer {
 
 // ── Material ───────────────────────────────────────────────────────────────
 
-/// Associe une texture (par TextureId) à une entité.
+/// Matériau PBR associé à une entité.
 pub struct Material {
-    pub texture_id: u32,
+    pub albedo_tex:  u32,   // TextureId GPU (index dans World::textures)
+    pub normal_tex:  u32,   // TextureId GPU — u32::MAX = flat normal default
+    pub metallic:    f32,   // 0.0 diélectrique, 1.0 métal
+    pub roughness:   f32,   // 0.0 miroir, 1.0 mat
+    pub emissive:    Vec3,  // Couleur auto-illuminée (r, g, b)
 }
 
 // ── RigidBody ───────────────────────────────────────────────────────────────

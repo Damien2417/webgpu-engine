@@ -10,4 +10,9 @@ export default defineConfig({
   optimizeDeps: {
     exclude: ['engine-core'],
   },
+  server: {
+    fs: {
+      allow: ['..'],
+    },
+  },
 });

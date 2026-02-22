@@ -17,9 +17,18 @@ impl Default for SceneTransform {
     }
 }
 
+fn default_metallic()  -> f32 { 0.0 }
+fn default_roughness() -> f32 { 0.5 }
+
 #[derive(Serialize, Deserialize)]
 pub struct SceneMaterial {
     pub texture: String,
+    #[serde(default)]
+    pub normal_texture: String,          // "" = pas de normal map
+    #[serde(default = "default_metallic")]
+    pub metallic: f32,
+    #[serde(default = "default_roughness")]
+    pub roughness: f32,
 }
 
 #[derive(Serialize, Deserialize)]
