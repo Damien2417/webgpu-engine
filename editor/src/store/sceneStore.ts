@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { bridge } from '../engine/engineBridge';
 import type { EntityId, EntityData } from '../engine/types';
+import { useComponentStore } from './componentStore';
 
 interface SceneState {
   entities: EntityData[];
@@ -37,6 +38,7 @@ export const useSceneStore = create<SceneState>((set, get) => ({
 
   removeEntity: (id) => {
     bridge.removeEntity(id);
+    useComponentStore.getState().removeEntity(id);
     get().refresh();
   },
 
