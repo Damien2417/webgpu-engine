@@ -170,9 +170,29 @@ export default function Viewport() {
   }, [isPlaying, refresh]);
 
   return (
-    <div ref={wrapRef} style={{ width: '100%', height: '100%', position: 'relative', cursor: 'grab' }}>
+    <div ref={wrapRef} style={{ width: '100%', height: '100%', position: 'relative', cursor: isPlaying ? 'none' : 'grab' }}>
       <canvas ref={canvasRef} style={{ display: 'block', width: '100%', height: '100%' }} />
-      <GizmoOverlay width={dims.w} height={dims.h} />
+      {!isPlaying && <GizmoOverlay width={dims.w} height={dims.h} />}
+      {isPlaying && (
+        <div style={{
+          position: 'absolute', top: '50%', left: '50%',
+          transform: 'translate(-50%, -50%)',
+          pointerEvents: 'none', color: 'white', fontSize: 18, fontWeight: 'bold',
+          textShadow: '0 0 3px black',
+          userSelect: 'none',
+        }}>
+          +
+        </div>
+      )}
+      {isPlaying && (
+        <div style={{
+          position: 'absolute', bottom: 8, left: '50%', transform: 'translateX(-50%)',
+          color: 'rgba(255,255,255,0.6)', fontSize: 10, pointerEvents: 'none',
+          textShadow: '0 0 3px black',
+        }}>
+          Clic pour capturer la souris · Echap pour libérer
+        </div>
+      )}
     </div>
   );
 }
