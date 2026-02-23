@@ -160,6 +160,9 @@ export default function Viewport() {
 
   // Redémarre l'editor loop quand on quitte le mode jeu
   useEffect(() => {
+    // Note: this effect runs after the FPS effect above (React runs effects in declaration order).
+    // On play→stop: FPS cleanup calls stopLoop, then this restarts the editor loop.
+    // On mount: fires before bridge.initialize completes — startLoop is a safe no-op (world is null).
     if (!isPlaying) {
       bridge.stopLoop();
       bridge.startLoop(refresh);

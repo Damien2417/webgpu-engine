@@ -35,13 +35,18 @@ export function initScripts() {
     const script = compStore.getComponents(entity.id).script;
     if (!script || !script.trim()) continue;
 
+    let fn: ScriptFn;
     try {
-      const fn = new Function('entity', 'engine', 'deltaMs', script) as ScriptFn;
-      compiledScripts.push({ entityId: entity.id, onUpdate: fn });
-      // Call once with deltaMs=0 as onStart equivalent
-      fn({ id: entity.id }, engineProxy, 0);
+      fn = new Function('entity', 'engine', 'deltaMs', script) as ScriptFn;
     } catch (e) {
       console.error(`[Script] Compile error on entity ${entity.id}:`, e);
+      continue;
+    }
+    compiledScripts.push({ entityId: entity.id, onUpdate: fn });
+    try {
+      fn({ id: entity.id }, engineProxy, 0);
+    } catch (e) {
+      console.error(`[Script] onStart error on entity ${entity.id}:`, e);
     }
   }
 }
