@@ -2,6 +2,7 @@ import React, { useRef } from 'react';
 import { bridge } from '../../engine/engineBridge';
 import { useSceneStore } from '../../store/sceneStore';
 import { useEditorStore } from '../../store/editorStore';
+import { useComponentStore } from '../../store/componentStore';
 
 const btnStyle: React.CSSProperties = {
   background: 'none', border: 'none', color: 'var(--text)',
@@ -16,13 +17,20 @@ export default function MenuBar() {
   const handleNew = () => {
     if (!confirm('Nouvelle scène ? Les modifications non sauvegardées seront perdues.')) return;
     bridge.loadScene('{"entities":[],"directional_light":null}');
+    useComponentStore.getState().clearAll();
     select(null);
     refresh();
   };
 
   const handleSave = () => {
-    const json = bridge.saveScene();
-    const url  = URL.createObjectURL(new Blob([json], { type: 'application/json' }));
+    const engineJson = bridge.saveScene();
+    const editorMeta = useComponentStore.getState().serialize();
+    const fullScene  = JSON.stringify(
+      { engineScene: JSON.parse(engineJson), editorMeta },
+      null,
+      2
+    );
+    const url = URL.createObjectURL(new Blob([fullScene], { type: 'application/json' }));
     Object.assign(document.createElement('a'), { href: url, download: 'scene.json' }).click();
     URL.revokeObjectURL(url);
   };
@@ -32,7 +40,20 @@ export default function MenuBar() {
     if (!file) return;
     const reader = new FileReader();
     reader.onload = ev => {
-      bridge.loadScene(ev.target?.result as string);
+      const text = ev.target?.result as string;
+      try {
+        const parsed = JSON.parse(text);
+        if (parsed.engineScene && parsed.editorMeta) {
+          // Extended format: engine scene + editor metadata
+          bridge.loadScene(JSON.stringify(parsed.engineScene));
+          useComponentStore.getState().deserialize(parsed.editorMeta);
+        } else {
+          // Legacy format: raw engine scene JSON
+          bridge.loadScene(text);
+        }
+      } catch {
+        bridge.loadScene(text);
+      }
       select(null);
       refresh();
     };

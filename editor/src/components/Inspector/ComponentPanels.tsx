@@ -7,6 +7,7 @@ import RigidbodyPanel from './panels/RigidbodyPanel';
 import ColliderPanel from './panels/ColliderPanel';
 import LightPanel from './panels/LightPanel';
 import PlayerControllerPanel from './panels/PlayerControllerPanel';
+import ScriptPanel from './panels/ScriptPanel';
 
 export default function ComponentPanels({ entityId }: { entityId: EntityId }) {
   const { getComponents } = useComponentStore();
@@ -20,6 +21,7 @@ export default function ComponentPanels({ entityId }: { entityId: EntityId }) {
       {c.collider          !== undefined && <ColliderPanel         entityId={entityId} />}
       {(c.pointLight !== undefined || c.directionalLight !== undefined) && <LightPanel entityId={entityId} />}
       {c.isPlayer          !== undefined && <PlayerControllerPanel entityId={entityId} />}
+      {c.script            !== undefined && <ScriptPanel           entityId={entityId} />}
     </>
   );
 }
