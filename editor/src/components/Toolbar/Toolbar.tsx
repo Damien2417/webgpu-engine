@@ -23,15 +23,16 @@ export default function Toolbar() {
 
   const play = () => {
     setSnapshot(bridge.saveScene());
-    setPlaying(true);
-    bridge.startLoop(refresh);
+    bridge.stopLoop();   // Arrêter l'editor loop
+    setPlaying(true);    // → Viewport détecte isPlaying=true et démarre la game loop
   };
 
   const stop = () => {
-    bridge.stopLoop();
+    bridge.stopLoop();   // Arrêter la game loop
     if (sceneSnapshot) { bridge.loadScene(sceneSnapshot); refresh(); }
     setPlaying(false);
     setSnapshot(null);
+    // → Viewport détecte isPlaying=false et redémarre l'editor loop normal
   };
 
   return (

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { bridge } from '../../engine/engineBridge';
+import { useEditorStore } from '../../store/editorStore';
 import { useSceneStore } from '../../store/sceneStore';
 import GizmoOverlay from './GizmoOverlay';
 
@@ -19,7 +20,8 @@ export default function Viewport() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const wrapRef   = useRef<HTMLDivElement>(null);
   const [dims, setDims] = useState({ w: 0, h: 0 });
-  const refresh = useSceneStore(s => s.refresh);
+  const refresh   = useSceneStore(s => s.refresh);
+  const isPlaying = useEditorStore(s => s.isPlaying);
 
   // Init WASM + render loop
   useEffect(() => {
@@ -88,6 +90,77 @@ export default function Viewport() {
       el.removeEventListener('wheel', onWheel);
     };
   }, []);
+
+  // FPS input effect — active uniquement en mode jeu
+  useEffect(() => {
+    if (!isPlaying) return;
+
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    // Accumulation delta souris entre frames
+    let mouseDx = 0, mouseDy = 0;
+    let keys    = 0;
+
+    const onMouseMove = (e: MouseEvent) => {
+      mouseDx += e.movementX;
+      mouseDy += e.movementY;
+    };
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.code === 'KeyW')     keys |=  (1 << 0);
+      if (e.code === 'KeyS')     keys |=  (1 << 1);
+      if (e.code === 'KeyA')     keys |=  (1 << 2);
+      if (e.code === 'KeyD')     keys |=  (1 << 3);
+      if (e.code === 'Space')  { keys |=  (1 << 4); e.preventDefault(); }
+      if (e.code === 'Escape') { document.exitPointerLock(); }
+    };
+
+    const onKeyUp = (e: KeyboardEvent) => {
+      if (e.code === 'KeyW')   keys &= ~(1 << 0);
+      if (e.code === 'KeyS')   keys &= ~(1 << 1);
+      if (e.code === 'KeyA')   keys &= ~(1 << 2);
+      if (e.code === 'KeyD')   keys &= ~(1 << 3);
+      if (e.code === 'Space')  keys &= ~(1 << 4);
+    };
+
+    const onFrame = () => {
+      bridge.setInput(keys, mouseDx, mouseDy);
+      mouseDx = 0;
+      mouseDy = 0;
+    };
+
+    const onClick = () => canvas.requestPointerLock();
+
+    canvas.addEventListener('click', onClick);
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('keydown', onKeyDown);
+    document.addEventListener('keyup', onKeyUp);
+
+    // Start game loop (update + render) instead of render-only loop
+    bridge.stopLoop();
+    bridge.startGameLoop((_deltaMs) => {
+      onFrame();
+      refresh();
+    });
+
+    return () => {
+      canvas.removeEventListener('click', onClick);
+      document.removeEventListener('mousemove', onMouseMove);
+      document.removeEventListener('keydown', onKeyDown);
+      document.removeEventListener('keyup', onKeyUp);
+      bridge.setInput(0, 0, 0); // reset input
+      document.exitPointerLock();
+    };
+  }, [isPlaying]);
+
+  // Redémarre l'editor loop quand on quitte le mode jeu
+  useEffect(() => {
+    if (!isPlaying) {
+      bridge.stopLoop();
+      bridge.startLoop(refresh);
+    }
+  }, [isPlaying]);
 
   return (
     <div ref={wrapRef} style={{ width: '100%', height: '100%', position: 'relative', cursor: 'grab' }}>
