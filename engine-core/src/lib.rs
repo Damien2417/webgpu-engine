@@ -150,6 +150,7 @@ pub struct World {
     persistent_entities: HashSet<usize>,
     texture_registry:    HashMap<String, u32>,
     entity_names:        HashMap<usize, String>,
+    tags:                HashMap<usize, String>,
 }
 
 fn create_depth_texture(
@@ -708,6 +709,7 @@ impl World {
             persistent_entities: HashSet::new(),
             texture_registry:    HashMap::new(),
             entity_names:        HashMap::new(),
+            tags:                HashMap::new(),
         })
     }
 }
@@ -737,6 +739,27 @@ impl World {
         self.entity_names.insert(id, name);
     }
 
+    // ── Tags ──────────────────────────────────────────────────────────────────
+
+    /// Assigne un tag string à une entité. Remplace le tag précédent s'il en avait un.
+    pub fn set_tag(&mut self, id: usize, tag: &str) {
+        self.tags.insert(id, tag.to_string());
+    }
+
+    /// Retourne le premier ID d'entité ayant ce tag, ou u32::MAX si aucun.
+    pub fn get_entity_by_tag(&self, tag: &str) -> u32 {
+        self.tags
+            .iter()
+            .find(|(_, t)| t.as_str() == tag)
+            .map(|(&id, _)| id as u32)
+            .unwrap_or(u32::MAX)
+    }
+
+    /// Retourne le tag d'une entité ("" si aucun tag assigné).
+    pub fn get_tag(&self, id: usize) -> String {
+        self.tags.get(&id).cloned().unwrap_or_default()
+    }
+
     /// Supprime une entité et tous ses composants.
     pub fn remove_entity(&mut self, id: usize) {
         self.transforms.remove(id);
@@ -747,6 +770,7 @@ impl World {
         self.point_lights.remove(id);
         self.entity_gpus.remove(id);
         self.entity_names.remove(&id);
+        self.tags.remove(&id);
         self.persistent_entities.remove(&id);
     }
 
@@ -1554,6 +1578,7 @@ impl World {
             self.rigid_bodies.remove(id);
             self.colliders.remove(id);
             self.point_lights.remove(id);
+            self.tags.remove(&id);
         }
 
         self.directional_light = None;

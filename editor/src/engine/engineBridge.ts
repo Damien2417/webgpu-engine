@@ -142,14 +142,16 @@ class EngineBridge {
   // ── Tags ──────────────────────────────────────────────────────────────────────
 
   setTag(entityId: EntityId, tag: string): void {
-    // WASM API not yet available — will be implemented in Task 8
-    console.warn('[bridge] setTag: pas encore supporté par le build WASM (Task 8)');
+    this.world?.set_tag(entityId, tag);
   }
 
   getEntityByTag(tag: string): EntityId | null {
-    // WASM API not yet available — will be implemented in Task 8
-    console.warn('[bridge] getEntityByTag: pas encore supporté par le build WASM (Task 8)');
-    return null;
+    const id = this.world?.get_entity_by_tag(tag) ?? 0xFFFFFFFF;
+    return id === 0xFFFFFFFF ? null : id;
+  }
+
+  getTag(entityId: EntityId): string {
+    return this.world?.get_tag(entityId) ?? '';
   }
 
   // ── Simulation ────────────────────────────────────────────────────────────────

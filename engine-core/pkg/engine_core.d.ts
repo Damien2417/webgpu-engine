@@ -44,6 +44,10 @@ export class World {
      */
     create_entity(): number;
     /**
+     * Retourne le premier ID d'entité ayant ce tag, ou u32::MAX si aucun.
+     */
+    get_entity_by_tag(tag: string): number;
+    /**
      * Liste les IDs de toutes les entités qui ont un Transform.
      */
     get_entity_ids(): Uint32Array;
@@ -55,6 +59,10 @@ export class World {
      * Retourne le type de mesh d'une entité ("cube" | "plane").
      */
     get_mesh_type(id: number): string;
+    /**
+     * Retourne le tag d'une entité ("" si aucun tag assigné).
+     */
+    get_tag(id: number): string;
     /**
      * Retourne [px, py, pz, rx, ry, rz, sx, sy, sz] pour l'entité.
      * Retourne 9 zéros si l'entité n'a pas de Transform.
@@ -123,6 +131,10 @@ export class World {
     set_rotation(id: number, x: number, y: number, z: number): void;
     set_scale(id: number, x: number, y: number, z: number): void;
     /**
+     * Assigne un tag string à une entité. Remplace le tag précédent s'il en avait un.
+     */
+    set_tag(id: number, tag: string): void;
+    /**
      * Met à jour la physique et la caméra FPS. Appeler avant render_frame().
      */
     update(delta_ms: number): void;
@@ -147,9 +159,11 @@ export interface InitOutput {
     readonly world_add_rigid_body: (a: number, b: number, c: number) => void;
     readonly world_add_transform: (a: number, b: number, c: number, d: number, e: number) => void;
     readonly world_create_entity: (a: number) => number;
+    readonly world_get_entity_by_tag: (a: number, b: number, c: number) => number;
     readonly world_get_entity_ids: (a: number) => any;
     readonly world_get_entity_name: (a: number, b: number) => [number, number];
     readonly world_get_mesh_type: (a: number, b: number) => [number, number];
+    readonly world_get_tag: (a: number, b: number) => [number, number];
     readonly world_get_transform_array: (a: number, b: number) => any;
     readonly world_get_view_proj: (a: number) => any;
     readonly world_load_scene: (a: number, b: number, c: number) => any;
@@ -169,6 +183,7 @@ export interface InitOutput {
     readonly world_set_position: (a: number, b: number, c: number, d: number, e: number) => void;
     readonly world_set_rotation: (a: number, b: number, c: number, d: number, e: number) => void;
     readonly world_set_scale: (a: number, b: number, c: number, d: number, e: number) => void;
+    readonly world_set_tag: (a: number, b: number, c: number, d: number) => void;
     readonly world_update: (a: number, b: number) => void;
     readonly world_upload_texture: (a: number, b: number, c: number, d: number, e: number, f: number) => number;
     readonly wasm_bindgen__closure__destroy__h1594f53794f5ca3c: (a: number, b: number) => void;

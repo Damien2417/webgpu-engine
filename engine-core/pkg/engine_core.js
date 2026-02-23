@@ -106,6 +106,17 @@ export class World {
         return ret >>> 0;
     }
     /**
+     * Retourne le premier ID d'entité ayant ce tag, ou u32::MAX si aucun.
+     * @param {string} tag
+     * @returns {number}
+     */
+    get_entity_by_tag(tag) {
+        const ptr0 = passStringToWasm0(tag, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.world_get_entity_by_tag(this.__wbg_ptr, ptr0, len0);
+        return ret >>> 0;
+    }
+    /**
      * Liste les IDs de toutes les entités qui ont un Transform.
      * @returns {Uint32Array}
      */
@@ -140,6 +151,23 @@ export class World {
         let deferred1_1;
         try {
             const ret = wasm.world_get_mesh_type(this.__wbg_ptr, id);
+            deferred1_0 = ret[0];
+            deferred1_1 = ret[1];
+            return getStringFromWasm0(ret[0], ret[1]);
+        } finally {
+            wasm.__wbindgen_free(deferred1_0, deferred1_1, 1);
+        }
+    }
+    /**
+     * Retourne le tag d'une entité ("" si aucun tag assigné).
+     * @param {number} id
+     * @returns {string}
+     */
+    get_tag(id) {
+        let deferred1_0;
+        let deferred1_1;
+        try {
+            const ret = wasm.world_get_tag(this.__wbg_ptr, id);
             deferred1_0 = ret[0];
             deferred1_1 = ret[1];
             return getStringFromWasm0(ret[0], ret[1]);
@@ -330,6 +358,16 @@ export class World {
      */
     set_scale(id, x, y, z) {
         wasm.world_set_scale(this.__wbg_ptr, id, x, y, z);
+    }
+    /**
+     * Assigne un tag string à une entité. Remplace le tag précédent s'il en avait un.
+     * @param {number} id
+     * @param {string} tag
+     */
+    set_tag(id, tag) {
+        const ptr0 = passStringToWasm0(tag, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        wasm.world_set_tag(this.__wbg_ptr, id, ptr0, len0);
     }
     /**
      * Met à jour la physique et la caméra FPS. Appeler avant render_frame().
