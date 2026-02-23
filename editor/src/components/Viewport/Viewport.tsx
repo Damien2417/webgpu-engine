@@ -3,6 +3,7 @@ import { bridge } from '../../engine/engineBridge';
 import { useEditorStore } from '../../store/editorStore';
 import { useSceneStore } from '../../store/sceneStore';
 import GizmoOverlay from './GizmoOverlay';
+import { initScripts, tickScripts } from '../../engine/scriptRunner';
 
 // Caméra orbitale (state module-level pour persister entre re-renders)
 const orbit = { distance: 8, azimuth: 0.5, elevation: 0.4, tx: 0, ty: 0, tz: 0 };
@@ -139,7 +140,9 @@ export default function Viewport() {
 
     // Start game loop (update + render) instead of render-only loop
     bridge.stopLoop();
+    initScripts();
     bridge.startGameLoop((_deltaMs) => {
+      tickScripts(_deltaMs);
       onFrame();
       refresh();
     });
