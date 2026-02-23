@@ -31,9 +31,8 @@ export default function MaterialPanel({ entityId }: { entityId: EntityId }) {
 
   const apply = (next: MaterialData) => {
     setComponent(entityId, 'material', next);
-    if (next.texId >= 0) {
-      bridge.addPbrMaterial(entityId, next.texId, next.metallic, next.roughness);
-    }
+    // texId=-1 becomes u32::MAX at WASM boundary → engine uses default white texture
+    bridge.addPbrMaterial(entityId, next.texId, next.metallic, next.roughness);
     bridge.setEmissive(entityId, next.emissive[0], next.emissive[1], next.emissive[2]);
   };
 
