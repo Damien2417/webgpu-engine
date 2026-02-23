@@ -113,7 +113,7 @@ export default function Viewport() {
       if (e.code === 'KeyA')     keys |=  (1 << 2);
       if (e.code === 'KeyD')     keys |=  (1 << 3);
       if (e.code === 'Space')  { keys |=  (1 << 4); e.preventDefault(); }
-      if (e.code === 'Escape') { document.exitPointerLock(); }
+      if (e.code === 'Escape') { document.exitPointerLock(); } // releases cursor but keeps play mode running
     };
 
     const onKeyUp = (e: KeyboardEvent) => {
@@ -149,10 +149,11 @@ export default function Viewport() {
       document.removeEventListener('mousemove', onMouseMove);
       document.removeEventListener('keydown', onKeyDown);
       document.removeEventListener('keyup', onKeyUp);
+      bridge.stopLoop();
       bridge.setInput(0, 0, 0); // reset input
       document.exitPointerLock();
     };
-  }, [isPlaying]);
+  }, [isPlaying, refresh]);
 
   // Redémarre l'editor loop quand on quitte le mode jeu
   useEffect(() => {
@@ -160,7 +161,7 @@ export default function Viewport() {
       bridge.stopLoop();
       bridge.startLoop(refresh);
     }
-  }, [isPlaying]);
+  }, [isPlaying, refresh]);
 
   return (
     <div ref={wrapRef} style={{ width: '100%', height: '100%', position: 'relative', cursor: 'grab' }}>
