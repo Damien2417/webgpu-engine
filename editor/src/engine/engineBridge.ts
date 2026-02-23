@@ -105,7 +105,8 @@ class EngineBridge {
   }
 
   getMeshType(entityId: EntityId): 'cube' | 'plane' {
-    return (this.world?.get_mesh_type(entityId) as 'cube' | 'plane') ?? 'cube';
+    const t = this.world?.get_mesh_type(entityId);
+    return t === 'plane' ? 'plane' : 'cube';
   }
 
   // ── Physique ─────────────────────────────────────────────────────────────────
@@ -141,14 +142,14 @@ class EngineBridge {
   // ── Tags ──────────────────────────────────────────────────────────────────────
 
   setTag(entityId: EntityId, tag: string): void {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (this.world as any)?.set_tag(entityId, tag);
+    // WASM API not yet available — will be implemented in Task 8
+    console.warn('[bridge] setTag: pas encore supporté par le build WASM (Task 8)');
   }
 
   getEntityByTag(tag: string): EntityId | null {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const id = (this.world as any)?.get_entity_by_tag(tag) ?? 0xFFFFFFFF;
-    return id === 0xFFFFFFFF ? null : id;
+    // WASM API not yet available — will be implemented in Task 8
+    console.warn('[bridge] getEntityByTag: pas encore supporté par le build WASM (Task 8)');
+    return null;
   }
 
   // ── Simulation ────────────────────────────────────────────────────────────────
