@@ -1,0 +1,84 @@
+import React, { useState } from 'react';
+import { useComponentStore } from '../../store/componentStore';
+import type { EntityComponents } from '../../engine/types';
+import type { EntityId } from '../../engine/types';
+
+type ComponentKey = keyof EntityComponents;
+
+const AVAILABLE_COMPONENTS: { key: ComponentKey; label: string }[] = [
+  { key: 'meshType',         label: 'Mesh Renderer' },
+  { key: 'material',         label: 'Material (PBR)' },
+  { key: 'rigidbody',        label: 'Rigidbody' },
+  { key: 'collider',         label: 'Box Collider' },
+  { key: 'pointLight',       label: 'Point Light' },
+  { key: 'directionalLight', label: 'Directional Light' },
+  { key: 'isPlayer',         label: 'Player Controller' },
+  { key: 'script',           label: 'Script' },
+];
+
+const DEFAULT_VALUES: Required<EntityComponents> = {
+  meshType:         'cube',
+  material:         { texId: -1, metallic: 0.0, roughness: 0.5, emissive: [0, 0, 0] },
+  rigidbody:        { isStatic: true },
+  collider:         { hx: 0.5, hy: 0.5, hz: 0.5 },
+  pointLight:       { r: 1, g: 1, b: 1, intensity: 5.0 },
+  directionalLight: { dx: 0.3, dy: -1, dz: 0.5, r: 1, g: 0.95, b: 0.8, intensity: 1.5 },
+  isPlayer:         true,
+  script:           '// onUpdate(entity, engine, deltaMs) {\n//   // your code here\n// }',
+};
+
+export default function AddComponentButton({ entityId }: { entityId: EntityId }) {
+  const [open, setOpen] = useState(false);
+  const { getComponents, setComponent } = useComponentStore();
+  const existing = getComponents(entityId);
+
+  const available = AVAILABLE_COMPONENTS.filter(c => existing[c.key] === undefined);
+
+  if (available.length === 0) return null;
+
+  const add = (key: ComponentKey) => {
+    setComponent(entityId, key, DEFAULT_VALUES[key] as EntityComponents[typeof key]);
+    setOpen(false);
+  };
+
+  return (
+    <div style={{ padding: '8px', borderTop: '1px solid var(--border)' }}>
+      <button
+        onClick={() => setOpen(o => !o)}
+        style={{
+          width: '100%',
+          background: 'var(--bg-hover)',
+          border: '1px solid var(--border)',
+          color: 'var(--text)',
+          borderRadius: 3,
+          padding: '4px 0',
+          cursor: 'pointer',
+          fontSize: 11,
+        }}
+      >
+        + Add Component
+      </button>
+      {open && (
+        <div style={{
+          marginTop: 4,
+          background: 'var(--bg-panel)',
+          border: '1px solid var(--border)',
+          borderRadius: 3,
+          overflow: 'hidden',
+        }}>
+          {available.map(c => (
+            <div
+              key={c.key}
+              onClick={() => add(c.key)}
+              style={{ padding: '5px 10px', cursor: 'pointer', fontSize: 11, color: 'var(--text)' }}
+              onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-hover)')}
+              onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+            >
+              {c.label}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
