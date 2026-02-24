@@ -1,0 +1,6 @@
+# Editor local artifacts
+node_modules/
+dist/
+.asset-backend/
+.vite/
+

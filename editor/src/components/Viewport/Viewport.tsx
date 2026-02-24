@@ -180,6 +180,8 @@ export default function Viewport() {
     const onKeyDown = (e: KeyboardEvent) => {
       const tag = (document.activeElement as HTMLElement | null)?.tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+      // Ignore editor/browser shortcuts so combos like Ctrl+Z don't move free-cam.
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
       keys.add(e.code);
     };
     const onKeyUp = (e: KeyboardEvent) => {
