@@ -73,6 +73,18 @@ class EngineBridge {
     this.world?.set_camera(ex, ey, ez, tx, ty, tz);
   }
 
+  addCamera(id: EntityId, fov: number, near: number, far: number): void {
+    this.world?.add_camera(id, fov, near, far);
+  }
+
+  setActiveCamera(id: EntityId): void {
+    this.world?.set_active_camera(id);
+  }
+
+  removeActiveCamera(): void {
+    this.world?.remove_active_camera();
+  }
+
   getViewProj(): Float32Array {
     if (!this.world) return new Float32Array(16);
     return this.world.get_view_proj();

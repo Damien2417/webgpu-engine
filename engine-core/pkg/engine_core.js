@@ -19,6 +19,15 @@ export class World {
         wasm.__wbg_world_free(ptr, 0);
     }
     /**
+     * @param {number} id
+     * @param {number} fov
+     * @param {number} near
+     * @param {number} far
+     */
+    add_camera(id, fov, near, far) {
+        wasm.world_add_camera(this.__wbg_ptr, id, fov, near, far);
+    }
+    /**
      * Ajoute un Collider AABB (demi-extents en mètres). Centre = Transform.position.
      * @param {number} id
      * @param {number} hx
@@ -252,6 +261,9 @@ export class World {
         const len0 = WASM_VECTOR_LEN;
         wasm.world_register_texture(this.__wbg_ptr, ptr0, len0, texture_id);
     }
+    remove_active_camera() {
+        wasm.world_remove_active_camera(this.__wbg_ptr);
+    }
     /**
      * Supprime une entité et tous ses composants.
      * @param {number} id
@@ -280,6 +292,12 @@ export class World {
         } finally {
             wasm.__wbindgen_free(deferred1_0, deferred1_1, 1);
         }
+    }
+    /**
+     * @param {number} id
+     */
+    set_active_camera(id) {
+        wasm.world_set_active_camera(this.__wbg_ptr, id);
     }
     /**
      * Définit la lumière ambiante globale.
@@ -1332,7 +1350,7 @@ function __wbg_get_imports() {
             arg0.writeTexture(arg1, arg2, arg3, arg4);
         }, arguments); },
         __wbindgen_cast_0000000000000001: function(arg0, arg1) {
-            // Cast intrinsic for `Closure(Closure { dtor_idx: 94, function: Function { arguments: [Externref], shim_idx: 95, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
+            // Cast intrinsic for `Closure(Closure { dtor_idx: 95, function: Function { arguments: [Externref], shim_idx: 96, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
             const ret = makeMutClosure(arg0, arg1, wasm.wasm_bindgen__closure__destroy__h1594f53794f5ca3c, wasm_bindgen__convert__closures_____invoke__hb5a70b2dabc2cd9f);
             return ret;
         },

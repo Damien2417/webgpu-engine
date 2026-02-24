@@ -5,6 +5,7 @@ export class World {
     private constructor();
     free(): void;
     [Symbol.dispose](): void;
+    add_camera(id: number, fov: number, near: number, far: number): void;
     /**
      * Ajoute un Collider AABB (demi-extents en mètres). Centre = Transform.position.
      */
@@ -97,6 +98,7 @@ export class World {
      * Appeler avant load_scene() pour que les textures nommées soient résolvables.
      */
     register_texture(name: string, texture_id: number): void;
+    remove_active_camera(): void;
     /**
      * Supprime une entité et tous ses composants.
      */
@@ -106,6 +108,7 @@ export class World {
      * Sérialise la scène courante (toutes les entités) en JSON string.
      */
     save_scene(): string;
+    set_active_camera(id: number): void;
     /**
      * Définit la lumière ambiante globale.
      */
@@ -176,6 +179,7 @@ export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembl
 export interface InitOutput {
     readonly memory: WebAssembly.Memory;
     readonly __wbg_world_free: (a: number, b: number) => void;
+    readonly world_add_camera: (a: number, b: number, c: number, d: number, e: number) => void;
     readonly world_add_collider_aabb: (a: number, b: number, c: number, d: number, e: number) => void;
     readonly world_add_directional_light: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => void;
     readonly world_add_material: (a: number, b: number, c: number) => void;
@@ -198,9 +202,11 @@ export interface InitOutput {
     readonly world_load_scene: (a: number, b: number, c: number) => any;
     readonly world_new: (a: any) => any;
     readonly world_register_texture: (a: number, b: number, c: number, d: number) => void;
+    readonly world_remove_active_camera: (a: number) => void;
     readonly world_remove_entity: (a: number, b: number) => void;
     readonly world_render_frame: (a: number, b: number) => void;
     readonly world_save_scene: (a: number) => [number, number];
+    readonly world_set_active_camera: (a: number, b: number) => void;
     readonly world_set_ambient_light: (a: number, b: number, c: number, d: number, e: number) => void;
     readonly world_set_camera: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => void;
     readonly world_set_emissive: (a: number, b: number, c: number, d: number, e: number) => void;

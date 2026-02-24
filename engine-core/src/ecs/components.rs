@@ -71,3 +71,15 @@ pub struct PointLight {
     pub color:     Vec3,
     pub intensity: f32,
 }
+
+// ── Camera ────────────────────────────────────────────────────────────────
+
+pub struct CameraComponent {
+    pub fov:  f32,   // degrees, default 60
+    pub near: f32,   // default 0.1
+    pub far:  f32,   // default 1000.0
+}
+
+impl Default for CameraComponent {
+    fn default() -> Self { CameraComponent { fov: 60.0, near: 0.1, far: 1000.0 } }
+}

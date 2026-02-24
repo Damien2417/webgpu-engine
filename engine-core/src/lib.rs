@@ -6,8 +6,8 @@ mod mesh;
 mod scene;
 
 use camera::Camera;
-use ecs::{Collider, Material, MeshRenderer, MeshType, PointLight, RigidBody, SparseSet, Transform};
-use scene::{SceneData, SceneDirectionalLight, SceneMaterial, ScenePointLight,
+use ecs::{CameraComponent, Collider, Material, MeshRenderer, MeshType, PointLight, RigidBody, SparseSet, Transform};
+use scene::{SceneCameraComponent, SceneData, SceneDirectionalLight, SceneMaterial, ScenePointLight,
             SceneRigidBody, SceneTransform};
 use mesh::{Vertex, CUBE_INDICES, CUBE_VERTICES, PLANE_INDICES, PLANE_VERTICES};
 
@@ -172,6 +172,10 @@ pub struct World {
     // Ambient light
     ambient_color:     glam::Vec3,
     ambient_intensity: f32,
+
+    // Camera entities
+    cameras:       SparseSet<CameraComponent>,
+    active_camera: Option<usize>,
 }
 
 fn create_depth_texture(
@@ -756,6 +760,8 @@ impl World {
             cylinder_vbuf, cylinder_ibuf, cylinder_ilen,
             ambient_color: glam::Vec3::new(0.1, 0.1, 0.1),
             ambient_intensity: 0.5,
+            cameras:       SparseSet::new(),
+            active_camera: None,
         })
     }
 }
@@ -818,6 +824,8 @@ impl World {
         self.entity_names.remove(&id);
         self.tags.remove(&id);
         self.persistent_entities.remove(&id);
+        self.cameras.remove(id);
+        if self.active_camera == Some(id) { self.active_camera = None; }
     }
 
     /// Liste les IDs de toutes les entités qui ont un Transform.
@@ -847,7 +855,7 @@ impl World {
     /// Retourne la matrice view*proj [16 f32, column-major] pour les gizmos.
     pub fn get_view_proj(&self) -> js_sys::Float32Array {
         let aspect = self.config.width as f32 / self.config.height as f32;
-        let vp = self.camera.proj_matrix(aspect) * self.camera.view_matrix();
+        let vp = self.camera_matrix(aspect);
         js_sys::Float32Array::from(vp.to_cols_array().as_slice())
     }
 
@@ -995,6 +1003,18 @@ impl World {
         self.camera.target = glam::Vec3::new(tx, ty, tz);
     }
 
+    pub fn add_camera(&mut self, id: usize, fov: f32, near: f32, far: f32) {
+        self.cameras.insert(id, CameraComponent { fov, near, far });
+    }
+
+    pub fn set_active_camera(&mut self, id: usize) {
+        self.active_camera = Some(id);
+    }
+
+    pub fn remove_active_camera(&mut self) {
+        self.active_camera = None;
+    }
+
     // ── Textures ──────────────────────────────────────────────────────────────
 
     /// Charge des pixels RGBA bruts en GPU. Retourne un TextureId (u32).
@@ -1071,8 +1091,7 @@ impl World {
 
         let view   = output.texture.create_view(&wgpu::TextureViewDescriptor::default());
         let aspect = self.config.width as f32 / self.config.height as f32;
-        let view_mat = self.camera.view_matrix();
-        let proj_mat = self.camera.proj_matrix(aspect);
+        let view_proj = self.camera_matrix(aspect);
 
         // ── Light space matrix ────────────────────────────────────────────────
         let light_dir = self.directional_light.as_ref()
@@ -1097,7 +1116,7 @@ impl World {
                     transform.rotation.z.to_radians(),
                 )
                 * Mat4::from_scale(transform.scale);
-            let mvp = proj_mat * view_mat * model;
+            let mvp = view_proj * model;
 
             let (metallic, roughness, emissive) = self.materials.get(id)
                 .map(|m| (m.metallic, m.roughness, m.emissive))
@@ -1133,7 +1152,14 @@ impl World {
         // ── Upload LightUniforms ──────────────────────────────────────────────
         {
             let mut lu = <LightUniforms as bytemuck::Zeroable>::zeroed();
-            lu.camera_pos = [self.camera.eye.x, self.camera.eye.y, self.camera.eye.z, 0.0];
+            let cam_pos = if let Some(pid) = self.player_entity {
+                self.transforms.get(pid).map(|t| t.position).unwrap_or(self.camera.eye)
+            } else if let Some(cid) = self.active_camera {
+                self.transforms.get(cid).map(|t| t.position).unwrap_or(self.camera.eye)
+            } else {
+                self.camera.eye
+            };
+            lu.camera_pos = [cam_pos.x, cam_pos.y, cam_pos.z, 0.0];
             lu.light_space_mat = lsm.to_cols_array_2d();
 
             if let Some(dl) = &self.directional_light {
@@ -1721,6 +1747,9 @@ impl World {
             if let Some(tag) = &entity_data.tag {
                 self.set_tag(id, tag);
             }
+            if let Some(cam) = entity_data.camera {
+                self.add_camera(id, cam.fov, cam.near, cam.far);
+            }
         }
 
         js_sys::Uint32Array::from(new_ids.as_slice())
@@ -1743,6 +1772,7 @@ impl World {
             .chain(self.rigid_bodies.iter().map(|(id, _)| id))
             .chain(self.colliders.iter().map(|(id, _)| id))
             .chain(self.point_lights.iter().map(|(id, _)| id))
+            .chain(self.cameras.iter().map(|(id, _)| id))
             .collect();
 
         // Trouver le nom de texture inverse (TextureId → nom)
@@ -1789,6 +1819,9 @@ impl World {
                 }),
                 name: self.entity_names.get(&id).cloned(),
                 tag:  self.tags.get(&id).cloned(),
+                camera: self.cameras.get(id).map(|c| SceneCameraComponent {
+                    fov: c.fov, near: c.near, far: c.far,
+                }),
             });
         }
 
@@ -1798,6 +1831,41 @@ impl World {
 }
 
 impl World {
+    fn camera_matrix(&self, aspect: f32) -> glam::Mat4 {
+        use glam::Mat4;
+        // Priority: FPS player > Active camera entity > Orbital camera
+        if let Some(pid) = self.player_entity {
+            if let Some(t) = self.transforms.get(pid) {
+                let cam  = self.cameras.get(pid);
+                let fov  = cam.map(|c| c.fov).unwrap_or(60.0);
+                let near = cam.map(|c| c.near).unwrap_or(0.1);
+                let far  = cam.map(|c| c.far).unwrap_or(1000.0);
+                let proj = Mat4::perspective_rh(fov.to_radians(), aspect, near, far);
+                let yaw   = t.rotation.y.to_radians();
+                let pitch = t.rotation.x.to_radians();
+                let forward = glam::Vec3::new(yaw.sin()*pitch.cos(), pitch.sin(), -yaw.cos()*pitch.cos());
+                let view = Mat4::look_at_rh(t.position, t.position + forward, glam::Vec3::Y);
+                return proj * view;
+            }
+        }
+        if let Some(cam_id) = self.active_camera {
+            if let Some(t) = self.transforms.get(cam_id) {
+                let cam  = self.cameras.get(cam_id);
+                let fov  = cam.map(|c| c.fov).unwrap_or(60.0);
+                let near = cam.map(|c| c.near).unwrap_or(0.1);
+                let far  = cam.map(|c| c.far).unwrap_or(1000.0);
+                let proj = Mat4::perspective_rh(fov.to_radians(), aspect, near, far);
+                let yaw   = t.rotation.y.to_radians();
+                let pitch = t.rotation.x.to_radians();
+                let forward = glam::Vec3::new(yaw.sin()*pitch.cos(), pitch.sin(), -yaw.cos()*pitch.cos());
+                let view = Mat4::look_at_rh(t.position, t.position + forward, glam::Vec3::Y);
+                return proj * view;
+            }
+        }
+        // Fallback: orbital camera
+        self.camera.proj_matrix(aspect) * self.camera.view_matrix()
+    }
+
     fn make_tex_bind_group(
         &self,
         albedo_view: &wgpu::TextureView,
@@ -1828,6 +1896,7 @@ impl World {
             .chain(self.rigid_bodies.iter().map(|(id, _)| id))
             .chain(self.colliders.iter().map(|(id, _)| id))
             .chain(self.point_lights.iter().map(|(id, _)| id))
+            .chain(self.cameras.iter().map(|(id, _)| id))
             .filter(|id| !self.persistent_entities.contains(id))
             .collect();
 
@@ -1839,7 +1908,9 @@ impl World {
             self.rigid_bodies.remove(id);
             self.colliders.remove(id);
             self.point_lights.remove(id);
+            self.cameras.remove(id);
         }
+        self.active_camera = None;
 
         // Reset next_id to 0 (or just after max persistent entity ID)
         self.next_id = self.persistent_entities

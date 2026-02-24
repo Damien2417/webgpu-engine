@@ -37,6 +37,13 @@ export interface PointLightData {
   intensity: number;
 }
 
+export interface CameraData {
+  fov:      number;
+  near:     number;
+  far:      number;
+  isActive: boolean;
+}
+
 export interface DirectionalLightData {
   dx: number;
   dy: number;
@@ -56,4 +63,5 @@ export interface EntityComponents {
   directionalLight?: DirectionalLightData;
   isPlayer?:         boolean;
   script?:           string;
+  camera?:           CameraData;
 }

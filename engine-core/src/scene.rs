@@ -19,6 +19,19 @@ impl Default for SceneTransform {
 
 fn default_metallic()  -> f32 { 0.0 }
 fn default_roughness() -> f32 { 0.5 }
+fn default_fov()  -> f32 { 60.0 }
+fn default_near() -> f32 { 0.1 }
+fn default_far()  -> f32 { 1000.0 }
+
+#[derive(Serialize, Deserialize)]
+pub struct SceneCameraComponent {
+    #[serde(default = "default_fov")]
+    pub fov:  f32,
+    #[serde(default = "default_near")]
+    pub near: f32,
+    #[serde(default = "default_far")]
+    pub far:  f32,
+}
 
 #[derive(Serialize, Deserialize)]
 pub struct SceneMaterial {
@@ -72,6 +85,8 @@ pub struct SceneEntityData {
     pub name: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tag: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub camera: Option<SceneCameraComponent>,
 }
 
 /// Structure top-level du fichier JSON de scène.

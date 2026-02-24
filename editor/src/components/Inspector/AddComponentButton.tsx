@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useComponentStore } from '../../store/componentStore';
+import { bridge } from '../../engine/engineBridge';
 import type { EntityComponents } from '../../engine/types';
 import type { EntityId } from '../../engine/types';
 
@@ -14,6 +15,7 @@ const AVAILABLE_COMPONENTS: { key: ComponentKey; label: string }[] = [
   { key: 'directionalLight', label: 'Directional Light' },
   { key: 'isPlayer',         label: 'Player Controller' },
   { key: 'script',           label: 'Script' },
+  { key: 'camera',           label: 'Camera' },
 ];
 
 const DEFAULT_VALUES: Required<EntityComponents> = {
@@ -25,6 +27,7 @@ const DEFAULT_VALUES: Required<EntityComponents> = {
   directionalLight: { dx: 0.3, dy: -1, dz: 0.5, r: 1, g: 0.95, b: 0.8, intensity: 1.5 },
   isPlayer:         true,
   script:           '// onUpdate(entity, engine, deltaMs) {\n//   // your code here\n// }',
+  camera:           { fov: 60, near: 0.1, far: 1000, isActive: false },
 };
 
 export default function AddComponentButton({ entityId }: { entityId: EntityId }) {
@@ -36,8 +39,56 @@ export default function AddComponentButton({ entityId }: { entityId: EntityId })
 
   if (available.length === 0) return null;
 
+  const applyEngineSide = (key: ComponentKey) => {
+    switch (key) {
+      case 'meshType': {
+        const m = DEFAULT_VALUES.meshType;
+        bridge.setMeshType(entityId, m);
+        break;
+      }
+      case 'material': {
+        const m = DEFAULT_VALUES.material;
+        bridge.addPbrMaterial(entityId, m.texId, m.metallic, m.roughness);
+        bridge.setEmissive(entityId, m.emissive[0], m.emissive[1], m.emissive[2]);
+        break;
+      }
+      case 'rigidbody': {
+        bridge.addRigidBody(entityId, DEFAULT_VALUES.rigidbody.isStatic);
+        break;
+      }
+      case 'collider': {
+        const c = DEFAULT_VALUES.collider;
+        bridge.addCollider(entityId, c.hx, c.hy, c.hz);
+        break;
+      }
+      case 'pointLight': {
+        const l = DEFAULT_VALUES.pointLight;
+        bridge.addPointLight(entityId, l.r, l.g, l.b, l.intensity);
+        break;
+      }
+      case 'directionalLight': {
+        const l = DEFAULT_VALUES.directionalLight;
+        bridge.addDirectionalLight(l.dx, l.dy, l.dz, l.r, l.g, l.b, l.intensity);
+        break;
+      }
+      case 'isPlayer': {
+        bridge.setPlayer(entityId);
+        break;
+      }
+      case 'camera': {
+        const c = DEFAULT_VALUES.camera;
+        bridge.addCamera(entityId, c.fov, c.near, c.far);
+        break;
+      }
+      case 'script':
+      default:
+        break;
+    }
+  };
+
   const add = (key: ComponentKey) => {
     setComponent(entityId, key, DEFAULT_VALUES[key] as EntityComponents[typeof key]);
+    applyEngineSide(key);
     setOpen(false);
   };
 

@@ -2,6 +2,7 @@
 /* eslint-disable */
 export const memory: WebAssembly.Memory;
 export const __wbg_world_free: (a: number, b: number) => void;
+export const world_add_camera: (a: number, b: number, c: number, d: number, e: number) => void;
 export const world_add_collider_aabb: (a: number, b: number, c: number, d: number, e: number) => void;
 export const world_add_directional_light: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => void;
 export const world_add_material: (a: number, b: number, c: number) => void;
@@ -24,9 +25,11 @@ export const world_get_view_proj: (a: number) => any;
 export const world_load_scene: (a: number, b: number, c: number) => any;
 export const world_new: (a: any) => any;
 export const world_register_texture: (a: number, b: number, c: number, d: number) => void;
+export const world_remove_active_camera: (a: number) => void;
 export const world_remove_entity: (a: number, b: number) => void;
 export const world_render_frame: (a: number, b: number) => void;
 export const world_save_scene: (a: number) => [number, number];
+export const world_set_active_camera: (a: number, b: number) => void;
 export const world_set_ambient_light: (a: number, b: number, c: number, d: number, e: number) => void;
 export const world_set_camera: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => void;
 export const world_set_emissive: (a: number, b: number, c: number, d: number, e: number) => void;
