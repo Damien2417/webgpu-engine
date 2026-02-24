@@ -1474,7 +1474,7 @@ impl World {
             if let Some(mt) = &entity_data.mesh_type {
                 self.set_mesh_type(id, mt);
             }
-            if let Some(name) = entity_data.name.clone() {
+            if let Some(name) = entity_data.name {
                 self.set_entity_name(id, name);
             }
             if let Some(tag) = &entity_data.tag {
@@ -1542,7 +1542,6 @@ impl World {
                 mesh_type: self.mesh_renderers.get(id).map(|mr| match mr.mesh_type {
                     MeshType::Cube  => "cube".to_string(),
                     MeshType::Plane => "plane".to_string(),
-                    _               => "cube".to_string(),
                 }),
                 name: self.entity_names.get(&id).cloned(),
                 tag:  self.tags.get(&id).cloned(),
