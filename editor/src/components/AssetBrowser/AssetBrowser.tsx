@@ -1,13 +1,15 @@
-import React, { useState, useRef } from 'react';
+import React, { useRef } from 'react';
 import { bridge } from '../../engine/engineBridge';
 import { useEditorStore } from '../../store/editorStore';
-
-interface AssetItem { name: string; url: string; texId: number; }
+import { useAssetStore } from '../../store/assetStore';
+import { useComponentStore } from '../../store/componentStore';
+import type { MaterialData } from '../../engine/types';
 
 export default function AssetBrowser() {
-  const [assets, setAssets]  = useState<AssetItem[]>([]);
-  const fileRef              = useRef<HTMLInputElement>(null);
-  const selectedId           = useEditorStore(s => s.selectedId);
+  const assets     = useAssetStore(s => s.assets);
+  const addAsset   = useAssetStore(s => s.addAsset);
+  const fileRef    = useRef<HTMLInputElement>(null);
+  const selectedId = useEditorStore(s => s.selectedId);
 
   const importTextures = async (e: React.ChangeEvent<HTMLInputElement>) => {
     for (const file of Array.from(e.target.files ?? [])) {
@@ -19,16 +21,20 @@ export default function AssetBrowser() {
       ctx.drawImage(bitmap, 0, 0);
       const { data }  = ctx.getImageData(0, 0, bitmap.width, bitmap.height);
       const texId     = bridge.uploadTexture(bitmap.width, bitmap.height, data);
-      if (texId >= 0) {
-        setAssets(prev => [...prev, { name: file.name, url: URL.createObjectURL(file), texId }]);
-      }
+      if (texId >= 0) addAsset({ name: file.name, url: URL.createObjectURL(file), texId });
     }
     e.target.value = '';
   };
 
   const applyToSelected = (texId: number) => {
     if (selectedId === null) return;
-    bridge.addMaterial(selectedId, texId);
+    const existing = useComponentStore.getState().getComponents(selectedId).material ?? {
+      texId: -1, metallic: 0.0, roughness: 0.5, emissive: [0, 0, 0] as [number, number, number],
+    };
+    const next: MaterialData = { ...existing, texId };
+    useComponentStore.getState().setComponent(selectedId, 'material', next);
+    bridge.addPbrMaterial(selectedId, texId, next.metallic, next.roughness);
+    bridge.setEmissive(selectedId, next.emissive[0], next.emissive[1], next.emissive[2]);
   };
 
   return (
@@ -41,16 +47,16 @@ export default function AssetBrowser() {
         >+ Import</button>
         <input ref={fileRef} type="file" accept="image/*" multiple style={{ display: 'none' }} onChange={importTextures} />
         {selectedId === null && assets.length > 0 && (
-          <span style={{ color: 'var(--text-dim)', fontWeight: 400, textTransform: 'none' }}>— sélectionner une entité puis cliquer une texture</span>
+          <span style={{ color: 'var(--text-dim)', fontWeight: 400, textTransform: 'none', fontSize: 10 }}>— select an entity first</span>
         )}
       </div>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, padding: 8, flex: 1, overflowY: 'auto' }}>
         {assets.map((a, i) => (
           <div
             key={i}
-            title={`Appliquer ${a.name}`}
+            title={`Apply ${a.name}`}
             onClick={() => applyToSelected(a.texId)}
-            style={{ width: 64, cursor: 'pointer', textAlign: 'center' }}
+            style={{ width: 64, cursor: selectedId !== null ? 'pointer' : 'default', textAlign: 'center', opacity: selectedId !== null ? 1 : 0.5 }}
           >
             <img src={a.url} alt={a.name} style={{ width: 64, height: 64, objectFit: 'cover', borderRadius: 3, border: '1px solid var(--border)', display: 'block' }} />
             <div style={{ fontSize: 10, color: 'var(--text-dim)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.name}</div>
