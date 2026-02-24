@@ -1,5 +1,6 @@
 import React from 'react';
 import { useEditorStore, type GizmoMode } from '../../store/editorStore';
+import { useComponentStore } from '../../store/componentStore';
 import { bridge } from '../../engine/engineBridge';
 import { useSceneStore } from '../../store/sceneStore';
 
@@ -18,21 +19,33 @@ const MODES: { key: GizmoMode; label: string; shortcut: string }[] = [
 ];
 
 export default function Toolbar() {
-  const { gizmoMode, setGizmoMode, isPlaying, setPlaying, setSnapshot, sceneSnapshot } = useEditorStore();
+  const { gizmoMode, setGizmoMode, isPlaying, setPlaying, setSnapshot, sceneSnapshot, select } = useEditorStore();
   const refresh = useSceneStore(s => s.refresh);
 
   const play = () => {
-    setSnapshot(bridge.saveScene());
-    bridge.stopLoop();   // Arrêter l'editor loop
-    setPlaying(true);    // → Viewport détecte isPlaying=true et démarre la game loop
+    // Save BOTH engine state AND editor metadata (component store)
+    const engineJson = bridge.saveScene();
+    const editorMeta = useComponentStore.getState().serialize();
+    setSnapshot(JSON.stringify({ engineJson, editorMeta }));
+    bridge.stopLoop();
+    setPlaying(true);
   };
 
   const stop = () => {
-    bridge.stopLoop();   // Arrêter la game loop
-    if (sceneSnapshot) { bridge.loadScene(sceneSnapshot); refresh(); }
+    bridge.stopLoop();
+    if (sceneSnapshot) {
+      try {
+        const snap = JSON.parse(sceneSnapshot);
+        bridge.loadScene(snap.engineJson);
+        useComponentStore.getState().deserialize(snap.editorMeta);
+      } catch {
+        bridge.loadScene(sceneSnapshot); // legacy: plain engine JSON
+      }
+      refresh();
+    }
     setPlaying(false);
     setSnapshot(null);
-    // → Viewport détecte isPlaying=false et redémarre l'editor loop normal
+    select(null);
   };
 
   return (
