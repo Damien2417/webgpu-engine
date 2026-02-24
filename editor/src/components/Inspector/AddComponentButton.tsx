@@ -27,7 +27,7 @@ const DEFAULT_VALUES: Required<EntityComponents> = {
   pointLight:       { r: 1, g: 1, b: 1, intensity: 5.0 },
   directionalLight: { dx: 0.3, dy: -1, dz: 0.5, r: 1, g: 0.95, b: 0.8, intensity: 1.5 },
   isPlayer:         true,
-  script:           '// onUpdate(entity, engine, deltaMs) {\n//   // your code here\n// }',
+  script:           '// Script body executed every frame in Play mode.\n// Available: entity.id, engine, deltaMs (ms)\n\nconst [x, y, z] = engine.getPosition(entity.id);\nengine.setPosition(entity.id, x, y + Math.sin(Date.now() * 0.001) * 0.001, z);',
   camera:           { fov: 60, near: 0.1, far: 1000, isActive: false, followEntity: true },
   particle:         {
     rate: 20,

@@ -10,7 +10,7 @@ export default function ScriptPanel({ entityId }: { entityId: EntityId }) {
   return (
     <PanelSection title="Script (JS)" onRemove={() => removeComponent(entityId, 'script')}>
       <div style={{ fontSize: 10, color: 'var(--text-dim)', marginBottom: 4 }}>
-        Lifecycle: <code>onUpdate(entity, engine, deltaMs)</code>
+        Script body executed each frame in Play mode with <code>entity</code>, <code>engine</code>, <code>deltaMs</code>.
       </div>
       <textarea
         value={script}
