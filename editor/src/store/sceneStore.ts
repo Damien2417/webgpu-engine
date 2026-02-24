@@ -6,12 +6,13 @@ import { useComponentStore } from './componentStore';
 interface SceneState {
   entities: EntityData[];
 
-  refresh:        () => void;
-  addEntity:      (name?: string) => EntityId;
-  removeEntity:   (id: EntityId) => void;
-  updatePosition: (id: EntityId, x: number, y: number, z: number) => void;
-  updateRotation: (id: EntityId, x: number, y: number, z: number) => void;
-  updateScale:    (id: EntityId, x: number, y: number, z: number) => void;
+  refresh:         () => void;
+  addEntity:       (name?: string) => EntityId;
+  removeEntity:    (id: EntityId) => void;
+  duplicateEntity: (id: EntityId) => EntityId | null;
+  updatePosition:  (id: EntityId, x: number, y: number, z: number) => void;
+  updateRotation:  (id: EntityId, x: number, y: number, z: number) => void;
+  updateScale:     (id: EntityId, x: number, y: number, z: number) => void;
 }
 
 export const useSceneStore = create<SceneState>((set, get) => ({
@@ -40,6 +41,21 @@ export const useSceneStore = create<SceneState>((set, get) => ({
     bridge.removeEntity(id);
     useComponentStore.getState().removeEntity(id);
     get().refresh();
+  },
+
+  duplicateEntity: (id) => {
+    const src = get().entities.find(e => e.id === id);
+    if (!src) return null;
+    const newId = bridge.createEntity(src.name + ' (copy)');
+    bridge.addMeshRenderer(newId);
+    const t = src.transform;
+    bridge.setPosition(newId, t.position[0] + 0.5, t.position[1], t.position[2]);
+    bridge.setRotation(newId, t.rotation[0], t.rotation[1], t.rotation[2]);
+    bridge.setScale(newId, t.scale[0], t.scale[1], t.scale[2]);
+    const mt = bridge.getMeshType(id);
+    bridge.setMeshType(newId, mt);
+    get().refresh();
+    return newId;
   },
 
   updatePosition: (id, x, y, z) => {

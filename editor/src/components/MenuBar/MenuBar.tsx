@@ -1,21 +1,24 @@
-import React, { useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { bridge } from '../../engine/engineBridge';
 import { useSceneStore } from '../../store/sceneStore';
 import { useEditorStore } from '../../store/editorStore';
 import { useComponentStore } from '../../store/componentStore';
 
-const btnStyle: React.CSSProperties = {
-  background: 'none', border: 'none', color: 'var(--text)',
-  padding: '2px 10px', cursor: 'pointer', fontSize: 12, borderRadius: 3,
-};
-
 export default function MenuBar() {
-  const fileRef  = useRef<HTMLInputElement>(null);
-  const refresh  = useSceneStore(s => s.refresh);
-  const select   = useEditorStore(s => s.select);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const refresh = useSceneStore(s => s.refresh);
+  const select = useEditorStore(s => s.select);
+  const [isLight, setIsLight] = useState(false);
+
+  useEffect(() => {
+    const stored = localStorage.getItem('editor_theme');
+    const shouldLight = stored === 'light';
+    setIsLight(shouldLight);
+    document.documentElement.setAttribute('data-theme', shouldLight ? 'light' : 'dark');
+  }, []);
 
   const handleNew = () => {
-    if (!confirm('Nouvelle scène ? Les modifications non sauvegardées seront perdues.')) return;
+    if (!confirm('New scene? Unsaved changes will be lost.')) return;
     bridge.loadScene('{"entities":[],"directional_light":null}');
     useComponentStore.getState().clearAll();
     select(null);
@@ -25,7 +28,7 @@ export default function MenuBar() {
   const handleSave = () => {
     const engineJson = bridge.saveScene();
     const editorMeta = useComponentStore.getState().serialize();
-    const fullScene  = JSON.stringify(
+    const fullScene = JSON.stringify(
       { engineScene: JSON.parse(engineJson), editorMeta },
       null,
       2
@@ -34,6 +37,12 @@ export default function MenuBar() {
     Object.assign(document.createElement('a'), { href: url, download: 'scene.json' }).click();
     URL.revokeObjectURL(url);
   };
+
+  useEffect(() => {
+    const onSave = () => handleSave();
+    document.addEventListener('editor:save', onSave);
+    return () => document.removeEventListener('editor:save', onSave);
+  }, []);
 
   const handleLoad = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -44,11 +53,9 @@ export default function MenuBar() {
       try {
         const parsed = JSON.parse(text);
         if (parsed.engineScene && parsed.editorMeta) {
-          // Extended format: engine scene + editor metadata
           bridge.loadScene(JSON.stringify(parsed.engineScene));
           useComponentStore.getState().deserialize(parsed.editorMeta);
         } else {
-          // Legacy format: raw engine scene JSON
           bridge.loadScene(text);
         }
       } catch {
@@ -61,15 +68,22 @@ export default function MenuBar() {
     e.target.value = '';
   };
 
+  const toggleTheme = () => {
+    const nextLight = !isLight;
+    setIsLight(nextLight);
+    localStorage.setItem('editor_theme', nextLight ? 'light' : 'dark');
+    document.documentElement.setAttribute('data-theme', nextLight ? 'light' : 'dark');
+  };
+
   return (
-    <>
-      <span style={{ fontWeight: 700, color: 'var(--accent)', fontSize: 13, letterSpacing: 1, marginRight: 8 }}>
-        WebUnity
-      </span>
-      <button style={btnStyle} onClick={handleNew}>New</button>
-      <button style={btnStyle} onClick={handleSave}>Save</button>
-      <button style={btnStyle} onClick={() => fileRef.current?.click()}>Load</button>
+    <div className="menu-bar">
+      <span className="menu-brand">Nova Forge</span>
+      <button className="ui-btn" onClick={handleNew}>New Scene</button>
+      <button className="ui-btn" onClick={handleSave}>Save</button>
+      <button className="ui-btn" onClick={() => fileRef.current?.click()}>Load</button>
+      <div className="menu-spacer" />
+      <button className="ui-btn" onClick={toggleTheme}>{isLight ? 'Dark Mode' : 'Light Mode'}</button>
       <input ref={fileRef} type="file" accept=".json" style={{ display: 'none' }} onChange={handleLoad} />
-    </>
+    </div>
   );
 }
