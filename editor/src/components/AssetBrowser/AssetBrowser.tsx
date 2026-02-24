@@ -3,12 +3,14 @@ import { bridge } from '../../engine/engineBridge';
 import { useEditorStore } from '../../store/editorStore';
 import { useAssetStore } from '../../store/assetStore';
 import { useComponentStore } from '../../store/componentStore';
+import { useSceneStore } from '../../store/sceneStore';
 import type { MaterialData } from '../../engine/types';
 
 export default function AssetBrowser() {
   const assets     = useAssetStore(s => s.assets);
   const addAsset   = useAssetStore(s => s.addAsset);
   const fileRef    = useRef<HTMLInputElement>(null);
+  const modelRef   = useRef<HTMLInputElement>(null);
   const selectedId = useEditorStore(s => s.selectedId);
 
   const importTextures = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -23,6 +25,37 @@ export default function AssetBrowser() {
       const texId     = bridge.uploadTexture(bitmap.width, bitmap.height, data);
       if (texId >= 0) addAsset({ name: file.name, url: URL.createObjectURL(file), texId });
     }
+    e.target.value = '';
+  };
+
+  const import3dModel = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const buffer = await file.arrayBuffer();
+    let mesh;
+    try {
+      if (file.name.toLowerCase().endsWith('.glb')) {
+        const { parseGlb } = await import('../../engine/parsers/parseGltf');
+        mesh = await parseGlb(buffer);
+      } else if (file.name.toLowerCase().endsWith('.obj')) {
+        const { parseObj } = await import('../../engine/parsers/parseObj');
+        mesh = parseObj(new TextDecoder().decode(buffer));
+      } else {
+        alert('Unsupported format. Use .obj or .glb');
+        return;
+      }
+    } catch (err) {
+      alert('Parse error: ' + String(err));
+      return;
+    }
+    const meshIdx = bridge.uploadCustomMesh(mesh.vertices, mesh.indices);
+    if (meshIdx < 0) return;
+    const baseName = file.name.replace(/.w+$/, '');
+    const { addEntity } = useSceneStore.getState();
+    const { select } = useEditorStore.getState();
+    const id = addEntity(baseName);
+    bridge.setMeshType(id, `custom:${meshIdx}`);
+    select(id);
     e.target.value = '';
   };
 
@@ -46,6 +79,11 @@ export default function AssetBrowser() {
           onClick={() => fileRef.current?.click()}
         >+ Import</button>
         <input ref={fileRef} type="file" accept="image/*" multiple style={{ display: 'none' }} onChange={importTextures} />
+        <button
+          style={{ background: 'none', border: '1px solid var(--border)', color: '#9b59b6', cursor: 'pointer', borderRadius: 3, padding: '1px 8px', fontSize: 11 }}
+          onClick={() => modelRef.current?.click()}
+        >+ 3D Model</button>
+        <input ref={modelRef} type="file" accept=".obj,.glb" style={{ display: 'none' }} onChange={import3dModel} />
         {selectedId === null && assets.length > 0 && (
           <span style={{ color: 'var(--text-dim)', fontWeight: 400, textTransform: 'none', fontSize: 10 }}>— select an entity first</span>
         )}

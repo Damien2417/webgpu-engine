@@ -139,6 +139,11 @@ export class World {
      */
     update(delta_ms: number): void;
     /**
+     * Upload custom mesh. vertices: flat f32 array (15 per vertex), indices: u32 array.
+     * Returns custom mesh index for use with set_mesh_type("custom:N").
+     */
+    upload_custom_mesh(vertices: Float32Array, indices: Uint32Array): number;
+    /**
      * Charge des pixels RGBA bruts en GPU. Retourne un TextureId (u32).
      * Cote TS : passer un Uint8Array de taille width * height * 4.
      */
@@ -185,6 +190,7 @@ export interface InitOutput {
     readonly world_set_scale: (a: number, b: number, c: number, d: number, e: number) => void;
     readonly world_set_tag: (a: number, b: number, c: number, d: number) => void;
     readonly world_update: (a: number, b: number) => void;
+    readonly world_upload_custom_mesh: (a: number, b: number, c: number, d: number, e: number) => number;
     readonly world_upload_texture: (a: number, b: number, c: number, d: number, e: number, f: number) => number;
     readonly wasm_bindgen__closure__destroy__h1594f53794f5ca3c: (a: number, b: number) => void;
     readonly wasm_bindgen__convert__closures_____invoke__h564448fd7b5a9a51: (a: number, b: number, c: any, d: any) => void;

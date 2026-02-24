@@ -151,6 +151,7 @@ pub struct World {
     texture_registry:    HashMap<String, u32>,
     entity_names:        HashMap<usize, String>,
     tags:                HashMap<usize, String>,
+    custom_meshes: Vec<(wgpu::Buffer, wgpu::Buffer, u32)>,
 }
 
 fn create_depth_texture(
@@ -710,6 +711,7 @@ impl World {
             texture_registry:    HashMap::new(),
             entity_names:        HashMap::new(),
             tags:                HashMap::new(),
+            custom_meshes:       Vec::new(),
         })
     }
 }
@@ -875,15 +877,33 @@ impl World {
         });
     }
 
+    /// Upload custom mesh. vertices: flat f32 array (15 per vertex), indices: u32 array.
+    /// Returns custom mesh index for use with set_mesh_type("custom:N").
+    pub fn upload_custom_mesh(&mut self, vertices: &[f32], indices: &[u32]) -> usize {
+        let vbuf = self.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label:    Some("custom_vbuf"),
+            contents: bytemuck::cast_slice(vertices),
+            usage:    wgpu::BufferUsages::VERTEX,
+        });
+        let ibuf = self.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label:    Some("custom_ibuf"),
+            contents: bytemuck::cast_slice(indices),
+            usage:    wgpu::BufferUsages::INDEX,
+        });
+        let idx = self.custom_meshes.len();
+        self.custom_meshes.push((vbuf, ibuf, indices.len() as u32));
+        idx
+    }
+
     /// Change le type de mesh d'une entité existante ("cube" ou "plane").
     pub fn set_mesh_type(&mut self, id: usize, mesh_type: &str) {
-        let mt = match mesh_type {
-            "plane" => MeshType::Plane,
-            "cube"  => MeshType::Cube,
-            other   => {
-                web_sys::console::warn_1(&format!("[set_mesh_type] type inconnu '{}', fallback cube", other).into());
-                MeshType::Cube
-            },
+        let mt = if let Some(n) = mesh_type.strip_prefix("custom:") {
+            MeshType::Custom(n.parse().unwrap_or(0))
+        } else {
+            match mesh_type {
+                "plane" => MeshType::Plane,
+                _       => MeshType::Cube,
+            }
         };
         if let Some(mr) = self.mesh_renderers.get_mut(id) {
             mr.mesh_type = mt;
@@ -893,9 +913,10 @@ impl World {
     /// Retourne le type de mesh d'une entité ("cube" | "plane").
     pub fn get_mesh_type(&self, id: usize) -> String {
         match self.mesh_renderers.get(id) {
-            Some(mr) => match mr.mesh_type {
-                MeshType::Cube  => "cube".to_string(),
-                MeshType::Plane => "plane".to_string(),
+            Some(mr) => match &mr.mesh_type {
+                MeshType::Cube       => "cube".to_string(),
+                MeshType::Plane      => "plane".to_string(),
+                MeshType::Custom(n)  => format!("custom:{}", n),
             },
             None => "cube".to_string(),
         }
@@ -1087,14 +1108,28 @@ impl World {
 
             for (id, mr) in self.mesh_renderers.iter() {
                 let Some(gpu) = self.entity_gpus.get(id) else { continue };
-                let (vertex_buffer, index_buffer, index_count) = match mr.mesh_type {
-                    MeshType::Cube  => (&self.cube_vertex_buffer,  &self.cube_index_buffer,  CUBE_INDICES.len() as u32),
-                    MeshType::Plane => (&self.plane_vertex_buffer, &self.plane_index_buffer, PLANE_INDICES.len() as u32),
+                match &mr.mesh_type {
+                    MeshType::Cube => {
+                        shadow_pass.set_vertex_buffer(0, self.cube_vertex_buffer.slice(..));
+                        shadow_pass.set_index_buffer(self.cube_index_buffer.slice(..), wgpu::IndexFormat::Uint16);
+                        shadow_pass.set_bind_group(0, &gpu.shadow_bind_group, &[]);
+                        shadow_pass.draw_indexed(0..CUBE_INDICES.len() as u32, 0, 0..1);
+                    },
+                    MeshType::Plane => {
+                        shadow_pass.set_vertex_buffer(0, self.plane_vertex_buffer.slice(..));
+                        shadow_pass.set_index_buffer(self.plane_index_buffer.slice(..), wgpu::IndexFormat::Uint16);
+                        shadow_pass.set_bind_group(0, &gpu.shadow_bind_group, &[]);
+                        shadow_pass.draw_indexed(0..PLANE_INDICES.len() as u32, 0, 0..1);
+                    },
+                    MeshType::Custom(n) => {
+                        if let Some(cm) = self.custom_meshes.get(*n) {
+                            shadow_pass.set_vertex_buffer(0, cm.0.slice(..));
+                            shadow_pass.set_index_buffer(cm.1.slice(..), wgpu::IndexFormat::Uint32);
+                            shadow_pass.set_bind_group(0, &gpu.shadow_bind_group, &[]);
+                            shadow_pass.draw_indexed(0..cm.2, 0, 0..1);
+                        }
+                    },
                 };
-                shadow_pass.set_vertex_buffer(0, vertex_buffer.slice(..));
-                shadow_pass.set_index_buffer(index_buffer.slice(..), wgpu::IndexFormat::Uint16);
-                shadow_pass.set_bind_group(0, &gpu.shadow_bind_group, &[]);
-                shadow_pass.draw_indexed(0..index_count, 0, 0..1);
             }
         }
 
@@ -1129,11 +1164,6 @@ impl World {
             for (id, mr) in self.mesh_renderers.iter() {
                 let Some(gpu) = self.entity_gpus.get(id) else { continue };
 
-                let (vertex_buffer, index_buffer, index_count) = match mr.mesh_type {
-                    MeshType::Cube  => (&self.cube_vertex_buffer,  &self.cube_index_buffer,  CUBE_INDICES.len() as u32),
-                    MeshType::Plane => (&self.plane_vertex_buffer, &self.plane_index_buffer, PLANE_INDICES.len() as u32),
-                };
-
                 // Group 1 : albedo + normal bind group (créé à la volée)
                 let (albedo_view, normal_view) = if let Some(mat) = self.materials.get(id) {
                     let av = if (mat.albedo_tex as usize) < self.textures.len() {
@@ -1153,13 +1183,29 @@ impl World {
 
                 let tex_bg = self.make_tex_bind_group(albedo_view, normal_view);
 
-                pass.set_vertex_buffer(0, vertex_buffer.slice(..));
-                pass.set_index_buffer(index_buffer.slice(..), wgpu::IndexFormat::Uint16);
                 pass.set_bind_group(0, &gpu.bind_group, &[]);
                 pass.set_bind_group(1, &tex_bg, &[]);
                 pass.set_bind_group(2, &self.light_bind_group, &[]);
                 pass.set_bind_group(3, &self.shadow_bind_group, &[]);
-                pass.draw_indexed(0..index_count, 0, 0..1);
+                match &mr.mesh_type {
+                    MeshType::Cube => {
+                        pass.set_vertex_buffer(0, self.cube_vertex_buffer.slice(..));
+                        pass.set_index_buffer(self.cube_index_buffer.slice(..), wgpu::IndexFormat::Uint16);
+                        pass.draw_indexed(0..CUBE_INDICES.len() as u32, 0, 0..1);
+                    },
+                    MeshType::Plane => {
+                        pass.set_vertex_buffer(0, self.plane_vertex_buffer.slice(..));
+                        pass.set_index_buffer(self.plane_index_buffer.slice(..), wgpu::IndexFormat::Uint16);
+                        pass.draw_indexed(0..PLANE_INDICES.len() as u32, 0, 0..1);
+                    },
+                    MeshType::Custom(n) => {
+                        if let Some(cm) = self.custom_meshes.get(*n) {
+                            pass.set_vertex_buffer(0, cm.0.slice(..));
+                            pass.set_index_buffer(cm.1.slice(..), wgpu::IndexFormat::Uint32);
+                            pass.draw_indexed(0..cm.2, 0, 0..1);
+                        }
+                    },
+                };
             }
         }
 
@@ -1539,9 +1585,10 @@ impl World {
 
             entities.push(SceneEntityData {
                 transform, mesh_renderer, material, rigid_body, collider_aabb, point_light,
-                mesh_type: self.mesh_renderers.get(id).map(|mr| match mr.mesh_type {
-                    MeshType::Cube  => "cube".to_string(),
-                    MeshType::Plane => "plane".to_string(),
+                mesh_type: self.mesh_renderers.get(id).map(|mr| match &mr.mesh_type {
+                    MeshType::Cube       => "cube".to_string(),
+                    MeshType::Plane      => "plane".to_string(),
+                    MeshType::Custom(n)  => format!("custom:{}", n),
                 }),
                 name: self.entity_names.get(&id).cloned(),
                 tag:  self.tags.get(&id).cloned(),

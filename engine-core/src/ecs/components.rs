@@ -21,6 +21,7 @@ pub enum MeshType {
     #[default]
     Cube,
     Plane,
+    Custom(usize),  // index into World::custom_meshes
 }
 
 pub struct MeshRenderer {

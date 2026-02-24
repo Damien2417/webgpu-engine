@@ -377,6 +377,21 @@ export class World {
         wasm.world_update(this.__wbg_ptr, delta_ms);
     }
     /**
+     * Upload custom mesh. vertices: flat f32 array (15 per vertex), indices: u32 array.
+     * Returns custom mesh index for use with set_mesh_type("custom:N").
+     * @param {Float32Array} vertices
+     * @param {Uint32Array} indices
+     * @returns {number}
+     */
+    upload_custom_mesh(vertices, indices) {
+        const ptr0 = passArrayF32ToWasm0(vertices, wasm.__wbindgen_malloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passArray32ToWasm0(indices, wasm.__wbindgen_malloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ret = wasm.world_upload_custom_mesh(this.__wbg_ptr, ptr0, len0, ptr1, len1);
+        return ret >>> 0;
+    }
+    /**
      * Charge des pixels RGBA bruts en GPU. Retourne un TextureId (u32).
      * Cote TS : passer un Uint8Array de taille width * height * 4.
      * @param {number} width
@@ -1270,7 +1285,7 @@ function __wbg_get_imports() {
             arg0.writeTexture(arg1, arg2, arg3, arg4);
         }, arguments); },
         __wbindgen_cast_0000000000000001: function(arg0, arg1) {
-            // Cast intrinsic for `Closure(Closure { dtor_idx: 93, function: Function { arguments: [Externref], shim_idx: 94, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
+            // Cast intrinsic for `Closure(Closure { dtor_idx: 94, function: Function { arguments: [Externref], shim_idx: 95, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
             const ret = makeMutClosure(arg0, arg1, wasm.wasm_bindgen__closure__destroy__h1594f53794f5ca3c, wasm_bindgen__convert__closures_____invoke__hb5a70b2dabc2cd9f);
             return ret;
         },
@@ -1559,9 +1574,23 @@ function makeMutClosure(arg0, arg1, dtor, f) {
     return real;
 }
 
+function passArray32ToWasm0(arg, malloc) {
+    const ptr = malloc(arg.length * 4, 4) >>> 0;
+    getUint32ArrayMemory0().set(arg, ptr / 4);
+    WASM_VECTOR_LEN = arg.length;
+    return ptr;
+}
+
 function passArray8ToWasm0(arg, malloc) {
     const ptr = malloc(arg.length * 1, 1) >>> 0;
     getUint8ArrayMemory0().set(arg, ptr / 1);
+    WASM_VECTOR_LEN = arg.length;
+    return ptr;
+}
+
+function passArrayF32ToWasm0(arg, malloc) {
+    const ptr = malloc(arg.length * 4, 4) >>> 0;
+    getFloat32ArrayMemory0().set(arg, ptr / 4);
     WASM_VECTOR_LEN = arg.length;
     return ptr;
 }

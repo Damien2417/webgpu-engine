@@ -100,13 +100,16 @@ class EngineBridge {
 
   // ── Mesh type ────────────────────────────────────────────────────────────────
 
-  setMeshType(entityId: EntityId, meshType: 'cube' | 'plane'): void {
+  setMeshType(entityId: EntityId, meshType: string): void {
     this.world?.set_mesh_type(entityId, meshType);
   }
 
-  getMeshType(entityId: EntityId): 'cube' | 'plane' {
-    const t = this.world?.get_mesh_type(entityId);
-    return t === 'plane' ? 'plane' : 'cube';
+  getMeshType(entityId: EntityId): string {
+    return this.world?.get_mesh_type(entityId) ?? 'cube';
+  }
+
+  uploadCustomMesh(vertices: Float32Array, indices: Uint32Array): number {
+    return this.world?.upload_custom_mesh(vertices, indices) ?? -1;
   }
 
   // ── Physique ─────────────────────────────────────────────────────────────────

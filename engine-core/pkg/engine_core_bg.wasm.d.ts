@@ -37,6 +37,7 @@ export const world_set_rotation: (a: number, b: number, c: number, d: number, e:
 export const world_set_scale: (a: number, b: number, c: number, d: number, e: number) => void;
 export const world_set_tag: (a: number, b: number, c: number, d: number) => void;
 export const world_update: (a: number, b: number) => void;
+export const world_upload_custom_mesh: (a: number, b: number, c: number, d: number, e: number) => number;
 export const world_upload_texture: (a: number, b: number, c: number, d: number, e: number, f: number) => number;
 export const wasm_bindgen__closure__destroy__h1594f53794f5ca3c: (a: number, b: number) => void;
 export const wasm_bindgen__convert__closures_____invoke__h564448fd7b5a9a51: (a: number, b: number, c: any, d: any) => void;
