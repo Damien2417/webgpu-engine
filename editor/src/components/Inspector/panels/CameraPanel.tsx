@@ -14,7 +14,8 @@ export default function CameraPanel({ entityId }: { entityId: EntityId }) {
     setComponent(entityId, 'camera', next);
     bridge.addCamera(entityId, next.fov, next.near, next.far);
     if (next.isActive) bridge.setActiveCamera(entityId);
-    else bridge.removeActiveCamera();
+    // Only call removeActiveCamera when transitioning from active → inactive
+    else if (cam.isActive && !next.isActive) bridge.removeActiveCamera();
   };
 
   return (

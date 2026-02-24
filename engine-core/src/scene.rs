@@ -31,6 +31,8 @@ pub struct SceneCameraComponent {
     pub near: f32,
     #[serde(default = "default_far")]
     pub far:  f32,
+    #[serde(default)]
+    pub is_active: bool,
 }
 
 #[derive(Serialize, Deserialize)]

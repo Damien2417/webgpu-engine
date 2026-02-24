@@ -1749,6 +1749,9 @@ impl World {
             }
             if let Some(cam) = entity_data.camera {
                 self.add_camera(id, cam.fov, cam.near, cam.far);
+                if cam.is_active {
+                    self.set_active_camera(id);
+                }
             }
         }
 
@@ -1821,6 +1824,7 @@ impl World {
                 tag:  self.tags.get(&id).cloned(),
                 camera: self.cameras.get(id).map(|c| SceneCameraComponent {
                     fov: c.fov, near: c.near, far: c.far,
+                    is_active: self.active_camera == Some(id),
                 }),
             });
         }
