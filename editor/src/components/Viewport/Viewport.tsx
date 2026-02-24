@@ -102,6 +102,13 @@ export default function Viewport() {
         if (sel !== null) {
           const t = bridge.getTransform(sel);
           const [px, py, pz] = t.position;
+          // Update orbit so subsequent mouse/wheel events don't snap back
+          orbit.tx = px;
+          orbit.ty = py;
+          orbit.tz = pz;
+          orbit.distance = Math.sqrt(27); // ~5.196 for (3,3,3) offset
+          orbit.azimuth   = Math.PI / 4;  // 45 degrees
+          orbit.elevation = Math.asin(1 / Math.sqrt(3)); // ~35.26 degrees
           bridge.setCamera(px + 3, py + 3, pz + 3, px, py, pz);
         }
       }

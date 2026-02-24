@@ -78,6 +78,7 @@ export default function GizmoOverlay({ width, height }: { width: number; height:
       }
 
       // Click-to-select: find nearest entity on screen
+      if (!bridge.isReady) return;
       const vp = bridge.getViewProj();
       let bestId: number | null = null;
       let bestDist = 20;
@@ -99,14 +100,16 @@ export default function GizmoOverlay({ width, height }: { width: number; height:
       const delta = (Math.abs(dx) > Math.abs(dy) ? dx : -dy) * 0.02;
 
       if (gizmoMode === 'translate') {
-        const [px, py, pz] = entity.transform.position;
+        const live = bridge.getTransform(entity.id);
+        const [px, py, pz] = live.position;
         updatePos(entity.id,
           px + (axis === 0 ? delta : 0),
           py + (axis === 1 ? delta : 0),
           pz + (axis === 2 ? delta : 0),
         );
       } else if (gizmoMode === 'rotate') {
-        const [rx, ry, rz] = entity.transform.rotation;
+        const live = bridge.getTransform(entity.id);
+        const [rx, ry, rz] = live.rotation;
         const deg = delta * 2;
         updateRot(entity.id,
           rx + (axis === 0 ? deg : 0),
@@ -114,7 +117,8 @@ export default function GizmoOverlay({ width, height }: { width: number; height:
           rz + (axis === 2 ? deg : 0),
         );
       } else if (gizmoMode === 'scale') {
-        const [sx, sy, sz] = entity.transform.scale;
+        const live = bridge.getTransform(entity.id);
+        const [sx, sy, sz] = live.scale;
         const scale = 1 + delta * 0.5;
         updateScale(entity.id,
           sx * (axis === 0 ? scale : 1),
