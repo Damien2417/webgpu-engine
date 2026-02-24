@@ -20,7 +20,8 @@ export default function ParticlePanel({ entityId }: { entityId: EntityId }) {
   React.useEffect(() => {
     registerEmitter(entityId, cfg);
     return () => unregisterEmitter(entityId);
-  }, [entityId]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [entityId, cfg]);
 
   const row = (label: string, key: keyof ParticleData, min: number, max: number, step: number) => (
     <div key={key} style={{ display:'flex', alignItems:'center', marginBottom:3, fontSize:11, gap:4 }}>

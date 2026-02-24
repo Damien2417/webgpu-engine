@@ -3,10 +3,11 @@ import type { EntityId, ParticleData } from './types';
 import { useSceneStore } from '../store/sceneStore';
 
 interface Particle {
-  id:       EntityId;
-  lifetime: number;
-  maxLife:  number;
-  velocity: [number, number, number];
+  id:        EntityId;
+  emitterId: EntityId;  // which emitter spawned this particle
+  lifetime:  number;
+  maxLife:   number;
+  velocity:  [number, number, number];
 }
 
 const activeParticles: Particle[] = [];
@@ -26,8 +27,10 @@ export function unregisterEmitter(emitterId: EntityId) {
 export function clearParticles() {
   for (const p of activeParticles) bridge.removeEntity(p.id);
   activeParticles.length = 0;
-  emitterConfigs.clear();
+  // Keep emitterConfigs intact so emitters resume on next Play press.
+  // Only reset the timers so spawn intervals restart cleanly.
   emitterTimers.clear();
+  for (const id of emitterConfigs.keys()) emitterTimers.set(id, 0);
 }
 
 export function tickParticles(deltaMs: number) {
@@ -53,6 +56,7 @@ export function tickParticles(deltaMs: number) {
       const len = Math.hypot(rx, 1.0, rz) || 1;
       activeParticles.push({
         id,
+        emitterId,
         lifetime: 0,
         maxLife:  cfg.lifetime,
         velocity: [rx / len * cfg.speed, 1.0 / len * cfg.speed, rz / len * cfg.speed],
@@ -69,9 +73,8 @@ export function tickParticles(deltaMs: number) {
       activeParticles.splice(i, 1);
       continue;
     }
-    // Apply gravity from the first registered emitter config
-    let gravity = 0;
-    for (const cfg of emitterConfigs.values()) { gravity = cfg.gravity; break; }
+    // Use gravity from the emitter that spawned this particle
+    const gravity = emitterConfigs.get(p.emitterId)?.gravity ?? 0;
 
     const t = bridge.getTransform(p.id);
     const [x, y, z] = t.position;
