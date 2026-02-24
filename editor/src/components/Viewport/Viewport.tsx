@@ -5,7 +5,7 @@ import { useSceneStore } from '../../store/sceneStore';
 import GizmoOverlay from './GizmoOverlay';
 import { initScripts, tickScripts } from '../../engine/scriptRunner';
 
-// Caméra orbitale (state module-level pour persister entre re-renders)
+// Orbital camera state kept at module level across renders.
 const orbit = { distance: 8, azimuth: 0.5, elevation: 0.4, tx: 0, ty: 0, tz: 0 };
 
 function orbitToEye() {
@@ -19,9 +19,9 @@ function orbitToEye() {
 
 export default function Viewport() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const wrapRef   = useRef<HTMLDivElement>(null);
+  const wrapRef = useRef<HTMLDivElement>(null);
   const [dims, setDims] = useState({ w: 0, h: 0 });
-  const refresh   = useSceneStore(s => s.refresh);
+  const refresh = useSceneStore(s => s.refresh);
   const isPlaying = useEditorStore(s => s.isPlaying);
 
   // Init WASM + render loop
@@ -33,7 +33,7 @@ export default function Viewport() {
       const parent = canvas.parentElement!;
       const w = parent.clientWidth;
       const h = parent.clientHeight;
-      canvas.width  = w;
+      canvas.width = w;
       canvas.height = h;
       setDims({ w, h });
     };
@@ -59,20 +59,22 @@ export default function Viewport() {
     bridge.setCamera(e.x, e.y, e.z, orbit.tx, orbit.ty, orbit.tz);
   }
 
-  // Drag souris = orbite, scroll = zoom
+  // Mouse drag = orbit, wheel = zoom
   useEffect(() => {
     const el = wrapRef.current;
     if (!el) return;
     let dragging = false;
-    let lastX = 0, lastY = 0;
+    let lastX = 0;
+    let lastY = 0;
 
-    const onDown  = (e: MouseEvent) => { dragging = true; lastX = e.clientX; lastY = e.clientY; };
-    const onUp    = () => { dragging = false; };
-    const onMove  = (e: MouseEvent) => {
+    const onDown = (e: MouseEvent) => { dragging = true; lastX = e.clientX; lastY = e.clientY; };
+    const onUp = () => { dragging = false; };
+    const onMove = (e: MouseEvent) => {
       if (!dragging) return;
-      orbit.azimuth   -= (e.clientX - lastX) * 0.005;
-      orbit.elevation  = Math.max(-1.5, Math.min(1.5, orbit.elevation + (e.clientY - lastY) * 0.005));
-      lastX = e.clientX; lastY = e.clientY;
+      orbit.azimuth -= (e.clientX - lastX) * 0.005;
+      orbit.elevation = Math.max(-1.5, Math.min(1.5, orbit.elevation + (e.clientY - lastY) * 0.005));
+      lastX = e.clientX;
+      lastY = e.clientY;
       applyCamera();
     };
     const onWheel = (e: WheelEvent) => {
@@ -92,16 +94,33 @@ export default function Viewport() {
     };
   }, []);
 
-  // FPS input effect — active uniquement en mode jeu
+  // F-to-frame: focus camera on selected entity
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'f' || e.key === 'F') {
+        const sel = useEditorStore.getState().selectedId;
+        if (sel !== null) {
+          const t = bridge.getTransform(sel);
+          const [px, py, pz] = t.position;
+          bridge.setCamera(px + 3, py + 3, pz + 3, px, py, pz);
+        }
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
+  // FPS input effect, only in game mode.
   useEffect(() => {
     if (!isPlaying) return;
 
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    // Accumulation delta souris entre frames
-    let mouseDx = 0, mouseDy = 0;
-    let keys    = 0;
+    // Mouse delta accumulation between frames.
+    let mouseDx = 0;
+    let mouseDy = 0;
+    let keys = 0;
 
     const onMouseMove = (e: MouseEvent) => {
       mouseDx += e.movementX;
@@ -109,20 +128,20 @@ export default function Viewport() {
     };
 
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.code === 'KeyW')     keys |=  (1 << 0);
-      if (e.code === 'KeyS')     keys |=  (1 << 1);
-      if (e.code === 'KeyA')     keys |=  (1 << 2);
-      if (e.code === 'KeyD')     keys |=  (1 << 3);
-      if (e.code === 'Space')  { keys |=  (1 << 4); e.preventDefault(); }
-      if (e.code === 'Escape') { document.exitPointerLock(); } // releases cursor but keeps play mode running
+      if (e.code === 'KeyW') keys |= (1 << 0);
+      if (e.code === 'KeyS') keys |= (1 << 1);
+      if (e.code === 'KeyA') keys |= (1 << 2);
+      if (e.code === 'KeyD') keys |= (1 << 3);
+      if (e.code === 'Space') { keys |= (1 << 4); e.preventDefault(); }
+      if (e.code === 'Escape') { document.exitPointerLock(); }
     };
 
     const onKeyUp = (e: KeyboardEvent) => {
-      if (e.code === 'KeyW')   keys &= ~(1 << 0);
-      if (e.code === 'KeyS')   keys &= ~(1 << 1);
-      if (e.code === 'KeyA')   keys &= ~(1 << 2);
-      if (e.code === 'KeyD')   keys &= ~(1 << 3);
-      if (e.code === 'Space')  keys &= ~(1 << 4);
+      if (e.code === 'KeyW') keys &= ~(1 << 0);
+      if (e.code === 'KeyS') keys &= ~(1 << 1);
+      if (e.code === 'KeyA') keys &= ~(1 << 2);
+      if (e.code === 'KeyD') keys &= ~(1 << 3);
+      if (e.code === 'Space') keys &= ~(1 << 4);
     };
 
     const onFrame = () => {
@@ -138,7 +157,6 @@ export default function Viewport() {
     document.addEventListener('keydown', onKeyDown);
     document.addEventListener('keyup', onKeyUp);
 
-    // Start game loop (update + render) instead of render-only loop
     bridge.stopLoop();
     initScripts();
     bridge.startGameLoop((_deltaMs) => {
@@ -153,16 +171,13 @@ export default function Viewport() {
       document.removeEventListener('keydown', onKeyDown);
       document.removeEventListener('keyup', onKeyUp);
       bridge.stopLoop();
-      bridge.setInput(0, 0, 0); // reset input
+      bridge.setInput(0, 0, 0);
       document.exitPointerLock();
     };
   }, [isPlaying, refresh]);
 
-  // Redémarre l'editor loop quand on quitte le mode jeu
+  // Restart editor loop when leaving game mode.
   useEffect(() => {
-    // Note: this effect runs after the FPS effect above (React runs effects in declaration order).
-    // On play→stop: FPS cleanup calls stopLoop, then this restarts the editor loop.
-    // On mount: fires before bridge.initialize completes — startLoop is a safe no-op (world is null).
     if (!isPlaying) {
       bridge.stopLoop();
       bridge.startLoop(refresh);
@@ -170,29 +185,12 @@ export default function Viewport() {
   }, [isPlaying, refresh]);
 
   return (
-    <div ref={wrapRef} style={{ width: '100%', height: '100%', position: 'relative', cursor: isPlaying ? 'none' : 'grab' }}>
-      <canvas ref={canvasRef} style={{ display: 'block', width: '100%', height: '100%' }} />
+    <div ref={wrapRef} className="viewport-root" style={{ cursor: isPlaying ? 'none' : 'grab' }}>
+      <canvas ref={canvasRef} className="viewport-canvas" />
+      <div className="viewport-grid" />
       {!isPlaying && <GizmoOverlay width={dims.w} height={dims.h} />}
-      {isPlaying && (
-        <div style={{
-          position: 'absolute', top: '50%', left: '50%',
-          transform: 'translate(-50%, -50%)',
-          pointerEvents: 'none', color: 'white', fontSize: 18, fontWeight: 'bold',
-          textShadow: '0 0 3px black',
-          userSelect: 'none',
-        }}>
-          +
-        </div>
-      )}
-      {isPlaying && (
-        <div style={{
-          position: 'absolute', bottom: 8, left: '50%', transform: 'translateX(-50%)',
-          color: 'rgba(255,255,255,0.6)', fontSize: 10, pointerEvents: 'none',
-          textShadow: '0 0 3px black',
-        }}>
-          Clic pour capturer la souris · Echap pour libérer
-        </div>
-      )}
+      {isPlaying && <div className="viewport-crosshair">+</div>}
+      {isPlaying && <div className="viewport-hint">Click to capture mouse - Esc to release</div>}
     </div>
   );
 }
