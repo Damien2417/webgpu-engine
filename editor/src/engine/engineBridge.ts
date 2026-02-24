@@ -85,6 +85,11 @@ class EngineBridge {
     this.world?.remove_active_camera();
   }
 
+  /** Switch engine camera priority: true = game mode (entity cameras active), false = editor (orbital only) */
+  setGameMode(enabled: boolean): void {
+    this.world?.set_game_mode(enabled);
+  }
+
   getViewProj(): Float32Array {
     if (!this.world) return new Float32Array(16);
     return this.world.get_view_proj();

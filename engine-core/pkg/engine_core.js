@@ -343,6 +343,14 @@ export class World {
         wasm.world_set_entity_name(this.__wbg_ptr, id, ptr0, len0);
     }
     /**
+     * Switch between game mode (Play) and editor mode.
+     * In editor mode, the active_camera entity is ignored — orbital camera is always used.
+     * @param {boolean} enabled
+     */
+    set_game_mode(enabled) {
+        wasm.world_set_game_mode(this.__wbg_ptr, enabled);
+    }
+    /**
      * Transmet l'état input du frame courant.
      * `keys` bitmask : bit0=W, bit1=S, bit2=A, bit3=D, bit4=SPACE.
      * `mouse_dx/dy` : delta pixels depuis le dernier frame (Pointer Lock).

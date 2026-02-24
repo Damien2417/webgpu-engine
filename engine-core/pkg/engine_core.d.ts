@@ -125,6 +125,11 @@ export class World {
      */
     set_entity_name(id: number, name: string): void;
     /**
+     * Switch between game mode (Play) and editor mode.
+     * In editor mode, the active_camera entity is ignored — orbital camera is always used.
+     */
+    set_game_mode(enabled: boolean): void;
+    /**
      * Transmet l'état input du frame courant.
      * `keys` bitmask : bit0=W, bit1=S, bit2=A, bit3=D, bit4=SPACE.
      * `mouse_dx/dy` : delta pixels depuis le dernier frame (Pointer Lock).
@@ -211,6 +216,7 @@ export interface InitOutput {
     readonly world_set_camera: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => void;
     readonly world_set_emissive: (a: number, b: number, c: number, d: number, e: number) => void;
     readonly world_set_entity_name: (a: number, b: number, c: number, d: number) => void;
+    readonly world_set_game_mode: (a: number, b: number) => void;
     readonly world_set_input: (a: number, b: number, c: number, d: number) => void;
     readonly world_set_mesh_type: (a: number, b: number, c: number, d: number) => void;
     readonly world_set_normal_map: (a: number, b: number, c: number) => void;

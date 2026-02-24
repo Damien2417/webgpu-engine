@@ -34,6 +34,7 @@ export const world_set_ambient_light: (a: number, b: number, c: number, d: numbe
 export const world_set_camera: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => void;
 export const world_set_emissive: (a: number, b: number, c: number, d: number, e: number) => void;
 export const world_set_entity_name: (a: number, b: number, c: number, d: number) => void;
+export const world_set_game_mode: (a: number, b: number) => void;
 export const world_set_input: (a: number, b: number, c: number, d: number) => void;
 export const world_set_mesh_type: (a: number, b: number, c: number, d: number) => void;
 export const world_set_normal_map: (a: number, b: number, c: number) => void;

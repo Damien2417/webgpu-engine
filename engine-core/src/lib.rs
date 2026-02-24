@@ -176,6 +176,7 @@ pub struct World {
     // Camera entities
     cameras:       SparseSet<CameraComponent>,
     active_camera: Option<usize>,
+    is_game_mode:  bool,   // true = Play mode; false = Editor mode (orbital camera)
 }
 
 fn create_depth_texture(
@@ -762,6 +763,7 @@ impl World {
             ambient_intensity: 0.5,
             cameras:       SparseSet::new(),
             active_camera: None,
+            is_game_mode:  false,
         })
     }
 }
@@ -1013,6 +1015,12 @@ impl World {
 
     pub fn remove_active_camera(&mut self) {
         self.active_camera = None;
+    }
+
+    /// Switch between game mode (Play) and editor mode.
+    /// In editor mode, the active_camera entity is ignored — orbital camera is always used.
+    pub fn set_game_mode(&mut self, enabled: bool) {
+        self.is_game_mode = enabled;
     }
 
     // ── Textures ──────────────────────────────────────────────────────────────
@@ -1837,33 +1845,36 @@ impl World {
 impl World {
     fn camera_matrix(&self, aspect: f32) -> glam::Mat4 {
         use glam::Mat4;
-        // Priority: FPS player > Active camera entity > Orbital camera
-        if let Some(pid) = self.player_entity {
-            if let Some(t) = self.transforms.get(pid) {
-                let cam  = self.cameras.get(pid);
-                let fov  = cam.map(|c| c.fov).unwrap_or(60.0);
-                let near = cam.map(|c| c.near).unwrap_or(0.1);
-                let far  = cam.map(|c| c.far).unwrap_or(1000.0);
-                let proj = Mat4::perspective_rh(fov.to_radians(), aspect, near, far);
-                let yaw   = t.rotation.y.to_radians();
-                let pitch = t.rotation.x.to_radians();
-                let forward = glam::Vec3::new(yaw.sin()*pitch.cos(), pitch.sin(), -yaw.cos()*pitch.cos());
-                let view = Mat4::look_at_rh(t.position, t.position + forward, glam::Vec3::Y);
-                return proj * view;
+        // Priority (game mode only): FPS player > Active camera entity > Orbital camera
+        // In editor mode, always fall through to orbital camera.
+        if self.is_game_mode {
+            if let Some(pid) = self.player_entity {
+                if let Some(t) = self.transforms.get(pid) {
+                    let cam  = self.cameras.get(pid);
+                    let fov  = cam.map(|c| c.fov).unwrap_or(60.0);
+                    let near = cam.map(|c| c.near).unwrap_or(0.1);
+                    let far  = cam.map(|c| c.far).unwrap_or(1000.0);
+                    let proj = Mat4::perspective_rh(fov.to_radians(), aspect, near, far);
+                    let yaw   = t.rotation.y.to_radians();
+                    let pitch = t.rotation.x.to_radians();
+                    let forward = glam::Vec3::new(yaw.sin()*pitch.cos(), pitch.sin(), -yaw.cos()*pitch.cos());
+                    let view = Mat4::look_at_rh(t.position, t.position + forward, glam::Vec3::Y);
+                    return proj * view;
+                }
             }
-        }
-        if let Some(cam_id) = self.active_camera {
-            if let Some(t) = self.transforms.get(cam_id) {
-                let cam  = self.cameras.get(cam_id);
-                let fov  = cam.map(|c| c.fov).unwrap_or(60.0);
-                let near = cam.map(|c| c.near).unwrap_or(0.1);
-                let far  = cam.map(|c| c.far).unwrap_or(1000.0);
-                let proj = Mat4::perspective_rh(fov.to_radians(), aspect, near, far);
-                let yaw   = t.rotation.y.to_radians();
-                let pitch = t.rotation.x.to_radians();
-                let forward = glam::Vec3::new(yaw.sin()*pitch.cos(), pitch.sin(), -yaw.cos()*pitch.cos());
-                let view = Mat4::look_at_rh(t.position, t.position + forward, glam::Vec3::Y);
-                return proj * view;
+            if let Some(cam_id) = self.active_camera {
+                if let Some(t) = self.transforms.get(cam_id) {
+                    let cam  = self.cameras.get(cam_id);
+                    let fov  = cam.map(|c| c.fov).unwrap_or(60.0);
+                    let near = cam.map(|c| c.near).unwrap_or(0.1);
+                    let far  = cam.map(|c| c.far).unwrap_or(1000.0);
+                    let proj = Mat4::perspective_rh(fov.to_radians(), aspect, near, far);
+                    let yaw   = t.rotation.y.to_radians();
+                    let pitch = t.rotation.x.to_radians();
+                    let forward = glam::Vec3::new(yaw.sin()*pitch.cos(), pitch.sin(), -yaw.cos()*pitch.cos());
+                    let view = Mat4::look_at_rh(t.position, t.position + forward, glam::Vec3::Y);
+                    return proj * view;
+                }
             }
         }
         // Fallback: orbital camera
