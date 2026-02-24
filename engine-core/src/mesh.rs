@@ -172,7 +172,7 @@ pub fn generate_cylinder(segs: u32) -> (Vec<Vertex>, Vec<u32>) {
         let (s, c) = angle.sin_cos();
         verts.push(Vertex { position: [r*c, -h, r*s], color:[1.0,1.0,1.0], uv:[0.5+0.5*c,0.5+0.5*s], normal:[0.0,-1.0,0.0], tangent:[1.0,0.0,0.0,1.0] });
     }
-    for j in 0..segs { idx.extend_from_slice(&[bot_center, bot_start+j, bot_start+j+1]); }
+    for j in 0..segs { idx.extend_from_slice(&[bot_center, bot_start+j+1, bot_start+j]); }
 
     (verts, idx)
 }

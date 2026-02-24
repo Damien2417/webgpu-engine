@@ -1157,9 +1157,9 @@ impl World {
             }
             lu.n_points = n as u32;
             lu.ambient_color = [
-                self.ambient_color.x * self.ambient_intensity,
-                self.ambient_color.y * self.ambient_intensity,
-                self.ambient_color.z * self.ambient_intensity,
+                self.ambient_color.x,
+                self.ambient_color.y,
+                self.ambient_color.z,
                 self.ambient_intensity,
             ];
             self.queue.write_buffer(&self.light_buffer, 0, bytemuck::bytes_of(&lu));
