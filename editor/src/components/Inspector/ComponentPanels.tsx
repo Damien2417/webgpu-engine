@@ -10,6 +10,7 @@ import PlayerControllerPanel from './panels/PlayerControllerPanel';
 import ScriptPanel from './panels/ScriptPanel';
 import CameraPanel from './panels/CameraPanel';
 import ParticlePanel from './panels/ParticlePanel';
+import TagField from './panels/TagField';
 
 export default function ComponentPanels({ entityId }: { entityId: EntityId }) {
   const { getComponents } = useComponentStore();
@@ -17,6 +18,7 @@ export default function ComponentPanels({ entityId }: { entityId: EntityId }) {
 
   return (
     <>
+      <TagField entityId={entityId} />
       {c.meshType          !== undefined && <MeshRendererPanel     entityId={entityId} />}
       {c.material          !== undefined && <MaterialPanel         entityId={entityId} />}
       {c.rigidbody         !== undefined && <RigidbodyPanel        entityId={entityId} />}

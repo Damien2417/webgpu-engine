@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useSceneStore } from '../../store/sceneStore';
 import { useEditorStore } from '../../store/editorStore';
+import { useComponentStore } from '../../store/componentStore';
 import { bridge } from '../../engine/engineBridge';
 
 const s: Record<string, React.CSSProperties> = {
@@ -45,6 +46,14 @@ export default function SceneGraph() {
     setRenamingId(null);
   };
 
+  // Capture undo snapshot before destructive operations
+  const snapBefore = () => {
+    useEditorStore.getState().pushUndo({
+      engineJson: bridge.saveScene(),
+      editorMeta: useComponentStore.getState().serialize() as Record<number, unknown>,
+    });
+  };
+
   // Global keyboard shortcuts
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -54,11 +63,13 @@ export default function SceneGraph() {
       if (e.key === 'e' || e.key === 'E') setGizmoMode('rotate');
       if (e.key === 'r' || e.key === 'R') setGizmoMode('scale');
       if ((e.key === 'Delete' || e.key === 'Backspace') && selectedId !== null) {
+        snapBefore();
         removeEntity(selectedId);
         select(null);
       }
       if (e.ctrlKey && (e.key === 'd' || e.key === 'D') && selectedId !== null) {
         e.preventDefault();
+        snapBefore();
         const newId = duplicateEntity(selectedId);
         if (newId !== null) select(newId);
       }
@@ -66,10 +77,30 @@ export default function SceneGraph() {
         e.preventDefault();
         document.dispatchEvent(new CustomEvent('editor:save'));
       }
+      // Undo: Ctrl+Z
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+        e.preventDefault();
+        const snap = useEditorStore.getState().undo();
+        if (snap) {
+          bridge.loadScene(snap.engineJson);
+          useComponentStore.getState().deserialize(snap.editorMeta as Record<number, import('../../engine/types').EntityComponents>);
+          refresh();
+        }
+      }
+      // Redo: Ctrl+Y or Ctrl+Shift+Z
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.shiftKey && e.key === 'z'))) {
+        e.preventDefault();
+        const snap = useEditorStore.getState().redo();
+        if (snap) {
+          bridge.loadScene(snap.engineJson);
+          useComponentStore.getState().deserialize(snap.editorMeta as Record<number, import('../../engine/types').EntityComponents>);
+          refresh();
+        }
+      }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [selectedId, select, removeEntity, duplicateEntity, setGizmoMode]);
+  }, [selectedId, select, removeEntity, duplicateEntity, setGizmoMode, refresh]);
 
   return (
     <div style={s.root}>
@@ -103,6 +134,7 @@ export default function SceneGraph() {
             onDoubleClick={() => startRename(e.id, e.name)}
             onContextMenu={(ev) => {
               ev.preventDefault();
+              snapBefore();
               removeEntity(e.id);
               if (selectedId === e.id) select(null);
             }}

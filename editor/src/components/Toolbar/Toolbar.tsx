@@ -3,6 +3,7 @@ import { useEditorStore, type GizmoMode } from '../../store/editorStore';
 import { useComponentStore } from '../../store/componentStore';
 import { bridge } from '../../engine/engineBridge';
 import { useSceneStore } from '../../store/sceneStore';
+import { syncEditorComponentsToEngine } from '../../engine/syncEditorComponents';
 
 const btn = (active: boolean): React.CSSProperties => ({
   background: active ? 'var(--bg-select)' : 'var(--bg-hover)',
@@ -13,16 +14,19 @@ const btn = (active: boolean): React.CSSProperties => ({
 });
 
 const MODES: { key: GizmoMode; label: string; shortcut: string }[] = [
-  { key: 'translate', label: '↔ Move',   shortcut: 'W' },
-  { key: 'rotate',    label: '↻ Rotate', shortcut: 'E' },
-  { key: 'scale',     label: '⤡ Scale',  shortcut: 'R' },
+  { key: 'translate', label: 'Move', shortcut: 'W' },
+  { key: 'rotate', label: 'Rotate', shortcut: 'E' },
+  { key: 'scale', label: 'Scale', shortcut: 'R' },
 ];
 
 export default function Toolbar() {
-  const { gizmoMode, setGizmoMode, isPlaying, setPlaying, setSnapshot, sceneSnapshot, select } = useEditorStore();
+  const { gizmoMode, setGizmoMode, isPlaying, setPlaying, setSnapshot, sceneSnapshot, select, isPaused, setPaused } = useEditorStore();
   const refresh = useSceneStore(s => s.refresh);
 
   const play = () => {
+    // Ensure editor metadata components are materialized in engine state before snapshot/play.
+    syncEditorComponentsToEngine();
+
     // Save BOTH engine state AND editor metadata (component store)
     const engineJson = bridge.saveScene();
     const editorMeta = useComponentStore.getState().serialize();
@@ -44,28 +48,49 @@ export default function Toolbar() {
       refresh();
     }
     setPlaying(false);
+    setPaused(false);
     setSnapshot(null);
     select(null);
   };
 
   return (
-    <>
-      {MODES.map(m => (
-        <button
-          key={m.key}
-          style={btn(gizmoMode === m.key && !isPlaying)}
-          onClick={() => setGizmoMode(m.key)}
-          title={`${m.label} (${m.shortcut})`}
-          disabled={isPlaying}
-        >
-          {m.label}
-        </button>
-      ))}
-      <div style={{ width: 1, height: 20, background: 'var(--border)', margin: '0 6px' }} />
-      {isPlaying
-        ? <button style={btn(false)} onClick={stop}>■ Stop</button>
-        : <button style={{ ...btn(false), color: '#4caf50' }} onClick={play}>▶ Play</button>
-      }
-    </>
+    <div className="toolbar">
+      <div className="toolbar-group">
+        {MODES.map(m => (
+          <button
+            key={m.key}
+            style={btn(gizmoMode === m.key && !isPlaying)}
+            onClick={() => setGizmoMode(m.key)}
+            title={`${m.label} (${m.shortcut})`}
+            disabled={isPlaying}
+          >
+            {m.label}
+          </button>
+        ))}
+      </div>
+      <div className="menu-spacer" />
+      <div className="toolbar-group">
+        {isPlaying
+          ? <button style={btn(false)} onClick={stop}>Stop</button>
+          : <button style={{ ...btn(false), color: '#4caf50' }} onClick={play}>Play</button>
+        }
+        {isPlaying && (
+          <button
+            style={{ ...btn(isPaused), marginLeft: 4 }}
+            onClick={() => {
+              if (!isPaused) {
+                bridge.stopLoop();
+                setPaused(true);
+              } else {
+                setPaused(false);
+                // Viewport will detect isPaused=false and restart the game loop
+              }
+            }}
+          >
+            {isPaused ? '▶ Resume' : '⏸ Pause'}
+          </button>
+        )}
+      </div>
+    </div>
   );
 }

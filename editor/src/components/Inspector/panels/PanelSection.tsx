@@ -2,11 +2,13 @@ import React from 'react';
 
 interface Props {
   title: string;
-  onRemove: () => void;
+  onRemove?: () => void;
   children: React.ReactNode;
+  enabled?: boolean;
+  onToggle?: () => void;
 }
 
-export default function PanelSection({ title, onRemove, children }: Props) {
+export default function PanelSection({ title, onRemove, children, enabled = true, onToggle }: Props) {
   return (
     <div style={{ borderTop: '1px solid var(--border)' }}>
       <div style={{
@@ -19,25 +21,36 @@ export default function PanelSection({ title, onRemove, children }: Props) {
         fontWeight: 600,
         color: 'var(--text)',
       }}>
-        <span>{title}</span>
-        <button
-          onClick={onRemove}
-          style={{
-            background: 'none',
-            border: 'none',
-            color: 'var(--text-dim)',
-            cursor: 'pointer',
-            fontSize: 10,
-            padding: '0 2px',
-          }}
-          title="Remove component"
-        >
-          ✕
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          {onToggle && (
+            <input
+              type="checkbox"
+              checked={enabled}
+              onChange={onToggle}
+              style={{ cursor: 'pointer', marginRight: 4 }}
+              onClick={e => e.stopPropagation()}
+            />
+          )}
+          <span>{title}</span>
+        </div>
+        {onRemove && (
+          <button
+            onClick={onRemove}
+            style={{
+              background: 'none',
+              border: 'none',
+              color: 'var(--text-dim)',
+              cursor: 'pointer',
+              fontSize: 10,
+              padding: '0 2px',
+            }}
+            title="Remove component"
+          >
+            ✕
+          </button>
+        )}
       </div>
-      <div style={{ padding: '6px 8px' }}>
-        {children}
-      </div>
+      {enabled && <div style={{ padding: '6px 8px' }}>{children}</div>}
     </div>
   );
 }

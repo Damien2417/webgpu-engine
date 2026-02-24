@@ -28,6 +28,7 @@ export default function Viewport() {
   const fpsRef = useRef({ frames: 0, lastSampleMs: performance.now() });
   const refresh = useSceneStore(s => s.refresh);
   const isPlaying = useEditorStore(s => s.isPlaying);
+  const isPaused = useEditorStore(s => s.isPaused);
 
   const trackFps = () => {
     const now = performance.now();
@@ -281,6 +282,56 @@ export default function Viewport() {
     };
   }, [isPlaying, refresh]);
 
+  // Pause/resume game loop when isPaused changes (only while playing).
+  useEffect(() => {
+    if (!isPlaying) return;
+    if (isPaused) {
+      bridge.stopLoop();
+    } else {
+      // Restart game loop when unpausing — recreate onFrame closure for input
+      let mouseDx = 0;
+      let mouseDy = 0;
+      let inputKeys = 0;
+
+      const onMouseMove = (e: MouseEvent) => { mouseDx += e.movementX; mouseDy += e.movementY; };
+      const onKeyDown = (e: KeyboardEvent) => {
+        if (e.code === 'KeyW') inputKeys |= (1 << 0);
+        if (e.code === 'KeyS') inputKeys |= (1 << 1);
+        if (e.code === 'KeyA') inputKeys |= (1 << 2);
+        if (e.code === 'KeyD') inputKeys |= (1 << 3);
+        if (e.code === 'Space') { inputKeys |= (1 << 4); e.preventDefault(); }
+        if (e.code === 'Escape') { document.exitPointerLock(); }
+      };
+      const onKeyUp = (e: KeyboardEvent) => {
+        if (e.code === 'KeyW') inputKeys &= ~(1 << 0);
+        if (e.code === 'KeyS') inputKeys &= ~(1 << 1);
+        if (e.code === 'KeyA') inputKeys &= ~(1 << 2);
+        if (e.code === 'KeyD') inputKeys &= ~(1 << 3);
+        if (e.code === 'Space') inputKeys &= ~(1 << 4);
+      };
+
+      document.addEventListener('mousemove', onMouseMove);
+      document.addEventListener('keydown', onKeyDown);
+      document.addEventListener('keyup', onKeyUp);
+
+      bridge.startGameLoop((_deltaMs) => {
+        tickScripts(_deltaMs);
+        tickParticles(_deltaMs);
+        bridge.setInput(inputKeys, mouseDx, mouseDy);
+        mouseDx = 0;
+        mouseDy = 0;
+        refresh();
+        trackFps();
+      });
+
+      return () => {
+        document.removeEventListener('mousemove', onMouseMove);
+        document.removeEventListener('keydown', onKeyDown);
+        document.removeEventListener('keyup', onKeyUp);
+      };
+    }
+  }, [isPaused, isPlaying, refresh]);
+
   // Restart editor loop when leaving game mode.
   useEffect(() => {
     if (!isPlaying) {
@@ -315,8 +366,9 @@ export default function Viewport() {
       </div>
       {!isPlaying && <GizmoOverlay width={dims.w} height={dims.h} />}
       {!isPlaying && <div className="viewport-hint">RMB look - WASD move - Q/E up/down - Shift boost - F focus</div>}
-      {isPlaying && <div className="viewport-crosshair">+</div>}
-      {isPlaying && <div className="viewport-hint">Click to capture mouse - Esc to release</div>}
+      {isPlaying && !isPaused && <div className="viewport-crosshair">+</div>}
+      {isPlaying && !isPaused && <div className="viewport-hint">Click to capture mouse - Esc to release</div>}
+      {isPlaying && isPaused && <div className="viewport-hint" style={{ color: 'var(--accent)' }}>PAUSED — click Resume to continue</div>}
     </div>
   );
 }
