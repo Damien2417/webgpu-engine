@@ -6,6 +6,7 @@ import { useAssetStore } from '../../store/assetStore';
 import { useCustomMeshStore } from '../../store/customMeshStore';
 import GizmoOverlay from './GizmoOverlay';
 import { initScripts, tickScripts } from '../../engine/scriptRunner';
+import { tickParticles, clearParticles } from '../../engine/particleSystem';
 import { hydrateAssetLibraryFromBackend, restoreSessionFromLocalStorage } from '../../engine/sessionPersistence';
 
 const freeCam = { pos: [6, 4, 6] as [number, number, number], yaw: -Math.PI / 4, pitch: -0.35 };
@@ -260,6 +261,7 @@ export default function Viewport() {
     initScripts();
     bridge.startGameLoop((_deltaMs) => {
       tickScripts(_deltaMs);
+      tickParticles(_deltaMs);
       onFrame();
       refresh();
       trackFps();
@@ -272,6 +274,7 @@ export default function Viewport() {
       document.removeEventListener('keyup', onKeyUp);
       bridge.stopLoop();
       bridge.setGameMode(false);  // restore orbital camera for editor
+      clearParticles();
       bridge.setInput(0, 0, 0);
       document.exitPointerLock();
     };

@@ -16,6 +16,7 @@ const AVAILABLE_COMPONENTS: { key: ComponentKey; label: string }[] = [
   { key: 'isPlayer',         label: 'Player Controller' },
   { key: 'script',           label: 'Script' },
   { key: 'camera',           label: 'Camera' },
+  { key: 'particle',         label: 'Particle Emitter' },
 ];
 
 const DEFAULT_VALUES: Required<EntityComponents> = {
@@ -28,6 +29,7 @@ const DEFAULT_VALUES: Required<EntityComponents> = {
   isPlayer:         true,
   script:           '// onUpdate(entity, engine, deltaMs) {\n//   // your code here\n// }',
   camera:           { fov: 60, near: 0.1, far: 1000, isActive: false },
+  particle:         { rate: 10, lifetime: 2, speed: 3, spread: 0.3, gravity: 2, color: [1, 0.5, 0] },
 };
 
 export default function AddComponentButton({ entityId }: { entityId: EntityId }) {
@@ -81,6 +83,7 @@ export default function AddComponentButton({ entityId }: { entityId: EntityId })
         break;
       }
       case 'script':
+      case 'particle':
       default:
         break;
     }

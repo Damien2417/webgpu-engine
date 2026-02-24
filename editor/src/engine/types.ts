@@ -54,6 +54,15 @@ export interface DirectionalLightData {
   intensity: number;
 }
 
+export interface ParticleData {
+  rate:     number;  // particles/second
+  lifetime: number;  // seconds
+  speed:    number;  // units/second
+  spread:   number;  // 0-1 cone spread
+  gravity:  number;  // downward force
+  color:    [number, number, number];
+}
+
 export interface EntityComponents {
   meshType?:         'cube' | 'plane';
   material?:         MaterialData;
@@ -64,4 +73,5 @@ export interface EntityComponents {
   isPlayer?:         boolean;
   script?:           string;
   camera?:           CameraData;
+  particle?:         ParticleData;
 }

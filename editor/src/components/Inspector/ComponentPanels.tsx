@@ -9,6 +9,7 @@ import LightPanel from './panels/LightPanel';
 import PlayerControllerPanel from './panels/PlayerControllerPanel';
 import ScriptPanel from './panels/ScriptPanel';
 import CameraPanel from './panels/CameraPanel';
+import ParticlePanel from './panels/ParticlePanel';
 
 export default function ComponentPanels({ entityId }: { entityId: EntityId }) {
   const { getComponents } = useComponentStore();
@@ -24,6 +25,7 @@ export default function ComponentPanels({ entityId }: { entityId: EntityId }) {
       {c.isPlayer          !== undefined && <PlayerControllerPanel entityId={entityId} />}
       {c.script            !== undefined && <ScriptPanel           entityId={entityId} />}
       {c.camera            !== undefined && <CameraPanel           entityId={entityId} />}
+      {c.particle          !== undefined && <ParticlePanel         entityId={entityId} />}
     </>
   );
 }
