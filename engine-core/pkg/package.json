@@ -1,0 +1,15 @@
+{
+  "name": "engine-core",
+  "type": "module",
+  "version": "0.1.0",
+  "files": [
+    "engine_core_bg.wasm",
+    "engine_core.js",
+    "engine_core.d.ts"
+  ],
+  "main": "engine_core.js",
+  "types": "engine_core.d.ts",
+  "sideEffects": [
+    "./snippets/*"
+  ]
+}
