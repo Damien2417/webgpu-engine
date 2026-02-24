@@ -114,6 +114,7 @@ export class World {
      */
     set_ambient_light(r: number, g: number, b: number, intensity: number): void;
     set_camera(ex: number, ey: number, ez: number, tx: number, ty: number, tz: number): void;
+    set_camera_follow_entity(id: number, follow_entity: boolean): void;
     /**
      * Rend un objet émissif (ex: ampoule, néon).
      * r,g,b > 1.0 permet de faire du "bloom" si on avait du post-process,
@@ -214,6 +215,7 @@ export interface InitOutput {
     readonly world_set_active_camera: (a: number, b: number) => void;
     readonly world_set_ambient_light: (a: number, b: number, c: number, d: number, e: number) => void;
     readonly world_set_camera: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => void;
+    readonly world_set_camera_follow_entity: (a: number, b: number, c: number) => void;
     readonly world_set_emissive: (a: number, b: number, c: number, d: number, e: number) => void;
     readonly world_set_entity_name: (a: number, b: number, c: number, d: number) => void;
     readonly world_set_game_mode: (a: number, b: number) => void;

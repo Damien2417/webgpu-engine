@@ -2,19 +2,32 @@ import React, { useRef } from 'react';
 import { bridge } from '../../engine/engineBridge';
 import { useEditorStore } from '../../store/editorStore';
 import { useAssetStore } from '../../store/assetStore';
+import { useCustomMeshStore } from '../../store/customMeshStore';
 import { useComponentStore } from '../../store/componentStore';
 import { useSceneStore } from '../../store/sceneStore';
 import type { MaterialData } from '../../engine/types';
+import { deleteBackendAsset, uploadBackendAsset } from '../../api/assetBackend';
 
 export default function AssetBrowser() {
   const assets     = useAssetStore(s => s.assets);
   const addAsset   = useAssetStore(s => s.addAsset);
+  const removeAsset = useAssetStore(s => s.removeAsset);
+  const addMeshAsset = useCustomMeshStore(s => s.addMesh);
   const fileRef    = useRef<HTMLInputElement>(null);
   const modelRef   = useRef<HTMLInputElement>(null);
   const selectedId = useEditorStore(s => s.selectedId);
 
+  const fileToDataUrl = (file: File): Promise<string> =>
+    new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result));
+      reader.onerror = () => reject(reader.error ?? new Error('Failed to read file'));
+      reader.readAsDataURL(file);
+    });
+
   const importTextures = async (e: React.ChangeEvent<HTMLInputElement>) => {
     for (const file of Array.from(e.target.files ?? [])) {
+      const dataUrl   = await fileToDataUrl(file);
       const bitmap    = await createImageBitmap(file);
       const offscreen = document.createElement('canvas');
       offscreen.width  = bitmap.width;
@@ -23,7 +36,17 @@ export default function AssetBrowser() {
       ctx.drawImage(bitmap, 0, 0);
       const { data }  = ctx.getImageData(0, 0, bitmap.width, bitmap.height);
       const texId     = bridge.uploadTexture(bitmap.width, bitmap.height, data);
-      if (texId >= 0) addAsset({ name: file.name, url: URL.createObjectURL(file), texId });
+      if (texId >= 0) {
+        let backendId: string | undefined;
+        try {
+          const saved = await uploadBackendAsset(file.name, 'texture', dataUrl);
+          backendId = saved.id;
+        } catch (err) {
+          console.warn('[AssetBrowser] backend upload failed (texture):', err);
+        }
+        bridge.registerTexture(file.name, texId);
+        addAsset({ name: file.name, url: dataUrl, texId, backendId });
+      }
     }
     e.target.value = '';
   };
@@ -50,6 +73,21 @@ export default function AssetBrowser() {
     }
     const meshIdx = bridge.uploadCustomMesh(mesh.vertices, mesh.indices);
     if (meshIdx < 0) return;
+    let backendId: string | undefined;
+    try {
+      const dataUrl = await fileToDataUrl(file);
+      const saved = await uploadBackendAsset(file.name, 'model', dataUrl);
+      backendId = saved.id;
+    } catch (err) {
+      console.warn('[AssetBrowser] backend upload failed (model):', err);
+    }
+    addMeshAsset({
+      name: file.name,
+      oldIndex: meshIdx,
+      vertices: Array.from(mesh.vertices),
+      indices: Array.from(mesh.indices),
+      backendId,
+    });
     const baseName = file.name.replace(/.w+$/, '');
     const { addEntity } = useSceneStore.getState();
     const { select } = useEditorStore.getState();
@@ -91,11 +129,41 @@ export default function AssetBrowser() {
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, padding: 8, flex: 1, overflowY: 'auto' }}>
         {assets.map((a, i) => (
           <div
-            key={i}
+            key={a.texId}
             title={`Apply ${a.name}`}
             onClick={() => applyToSelected(a.texId)}
-            style={{ width: 64, cursor: selectedId !== null ? 'pointer' : 'default', textAlign: 'center', opacity: selectedId !== null ? 1 : 0.5 }}
+            style={{ width: 64, cursor: selectedId !== null ? 'pointer' : 'default', textAlign: 'center', opacity: selectedId !== null ? 1 : 0.5, position: 'relative' }}
           >
+            <button
+              title={`Delete ${a.name}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                if (a.url.startsWith('blob:')) URL.revokeObjectURL(a.url);
+                if (a.backendId) {
+                  deleteBackendAsset(a.backendId).catch((err) => {
+                    console.warn('[AssetBrowser] backend delete failed:', err);
+                  });
+                }
+                removeAsset(a.texId);
+              }}
+              style={{
+                position: 'absolute',
+                top: -4,
+                right: -4,
+                width: 16,
+                height: 16,
+                borderRadius: 999,
+                border: '1px solid var(--border)',
+                background: 'var(--bg-panel)',
+                color: '#e74c3c',
+                fontSize: 10,
+                lineHeight: '14px',
+                cursor: 'pointer',
+                padding: 0,
+              }}
+            >
+              x
+            </button>
             <img src={a.url} alt={a.name} style={{ width: 64, height: 64, objectFit: 'cover', borderRadius: 3, border: '1px solid var(--border)', display: 'block' }} />
             <div style={{ fontSize: 10, color: 'var(--text-dim)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.name}</div>
           </div>

@@ -38,10 +38,11 @@ export interface PointLightData {
 }
 
 export interface CameraData {
-  fov:      number;
-  near:     number;
-  far:      number;
-  isActive: boolean;
+  fov:          number;
+  near:         number;
+  far:          number;
+  isActive:     boolean;
+  followEntity: boolean;
 }
 
 export interface DirectionalLightData {
@@ -55,12 +56,15 @@ export interface DirectionalLightData {
 }
 
 export interface ParticleData {
-  rate:     number;  // particles/second
-  lifetime: number;  // seconds
-  speed:    number;  // units/second
-  spread:   number;  // 0-1 cone spread
-  gravity:  number;  // downward force
-  color:    [number, number, number];
+  rate:       number;  // particles/second
+  lifetime:   number;  // seconds
+  speed:      number;  // units/second
+  spread:     number;  // 0-1 cone spread
+  gravity:    number;  // downward force
+  sizeStart:  number;  // spawn size
+  sizeEnd:    number;  // end-of-life size
+  colorStart: [number, number, number];
+  colorEnd:   [number, number, number];
 }
 
 export interface EntityComponents {

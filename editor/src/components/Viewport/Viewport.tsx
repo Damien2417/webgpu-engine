@@ -7,7 +7,12 @@ import { useCustomMeshStore } from '../../store/customMeshStore';
 import GizmoOverlay from './GizmoOverlay';
 import { initScripts, tickScripts, clearInputTracking } from '../../engine/scriptRunner';
 import { tickParticles, clearParticles } from '../../engine/particleSystem';
-import { hydrateAssetLibraryFromBackend, restoreSessionFromLocalStorage } from '../../engine/sessionPersistence';
+import {
+  getViewportCameraState,
+  hydrateAssetLibraryFromBackend,
+  restoreSessionFromLocalStorage,
+  setViewportCameraState,
+} from '../../engine/sessionPersistence';
 
 const freeCam = { pos: [6, 4, 6] as [number, number, number], yaw: -Math.PI / 4, pitch: -0.35 };
 
@@ -63,12 +68,25 @@ export default function Viewport() {
       if (started) return;
       started = true;
       await bridge.initialize(canvas);
+      const bootCam = getViewportCameraState();
+      if (bootCam) {
+        freeCam.pos = bootCam.pos;
+        freeCam.yaw = bootCam.yaw;
+        freeCam.pitch = bootCam.pitch;
+      }
       applyCamera();
       const restored = await restoreSessionFromLocalStorage();
       const hasAssets = useAssetStore.getState().assets.length > 0;
       const hasCustomMeshes = useCustomMeshStore.getState().meshes.length > 0;
       if (!restored || (!hasAssets && !hasCustomMeshes)) {
         await hydrateAssetLibraryFromBackend();
+      }
+      const restoredCam = getViewportCameraState();
+      if (restoredCam) {
+        freeCam.pos = restoredCam.pos;
+        freeCam.yaw = restoredCam.yaw;
+        freeCam.pitch = restoredCam.pitch;
+        applyCamera();
       }
       refresh();
       bridge.startLoop(() => {
@@ -84,6 +102,7 @@ export default function Viewport() {
 
   function applyCamera() {
     const f = getForward();
+    setViewportCameraState({ pos: [...freeCam.pos] as [number, number, number], yaw: freeCam.yaw, pitch: freeCam.pitch });
     bridge.setCamera(
       freeCam.pos[0], freeCam.pos[1], freeCam.pos[2],
       freeCam.pos[0] + f[0], freeCam.pos[1] + f[1], freeCam.pos[2] + f[2],

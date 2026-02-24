@@ -9,17 +9,8 @@ export default function Inspector() {
 
   return (
     <div style={{ height: '100%', overflowY: 'auto' }}>
-      <div style={{
-        padding: '5px 8px',
-        background: 'var(--bg-header)',
-        borderBottom: '1px solid var(--border)',
-        fontWeight: 600,
-        fontSize: 11,
-        textTransform: 'uppercase',
-        letterSpacing: '0.5px',
-        color: 'var(--text-dim)',
-      }}>
-        Inspector
+      <div className="panel-header">
+        <span className="panel-header-title">Inspector</span>
       </div>
       {selectedId !== null ? (
         <>
@@ -28,9 +19,7 @@ export default function Inspector() {
           <AddComponentButton entityId={selectedId} />
         </>
       ) : (
-        <div style={{ padding: 12, color: 'var(--text-dim)', fontSize: 11 }}>
-          No entity selected
-        </div>
+        <div className="panel-empty">No entity selected.</div>
       )}
     </div>
   );

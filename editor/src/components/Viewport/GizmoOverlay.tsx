@@ -1,6 +1,7 @@
 import { useRef, useEffect, useCallback } from 'react';
 import { useEditorStore } from '../../store/editorStore';
 import { useSceneStore } from '../../store/sceneStore';
+import { useComponentStore } from '../../store/componentStore';
 import { bridge } from '../../engine/engineBridge';
 import {
   project, AXIS_DIRS,
@@ -19,9 +20,47 @@ export default function GizmoOverlay({ width, height }: { width: number; height:
   const select      = useEditorStore(s => s.select);
   const entity      = useSceneStore(s => s.entities.find(e => e.id === selectedId));
   const entities    = useSceneStore(s => s.entities);
+  const collider    = useComponentStore(s => selectedId !== null ? s.getComponents(selectedId).collider : undefined);
   const updatePos   = useSceneStore(s => s.updatePosition);
   const updateRot   = useSceneStore(s => s.updateRotation);
   const updateScale = useSceneStore(s => s.updateScale);
+
+  const drawCollider = useCallback((ctx: CanvasRenderingContext2D) => {
+    if (!entity || !collider || !bridge.isReady) return;
+    const vp = bridge.getViewProj();
+    const [px, py, pz] = entity.transform.position;
+    const [sx, sy, sz] = entity.transform.scale;
+    const hx = Math.abs(collider.hx * sx);
+    const hy = Math.abs(collider.hy * sy);
+    const hz = Math.abs(collider.hz * sz);
+
+    const corners: [number, number, number][] = [
+      [px - hx, py - hy, pz - hz], [px + hx, py - hy, pz - hz],
+      [px + hx, py + hy, pz - hz], [px - hx, py + hy, pz - hz],
+      [px - hx, py - hy, pz + hz], [px + hx, py - hy, pz + hz],
+      [px + hx, py + hy, pz + hz], [px - hx, py + hy, pz + hz],
+    ];
+    const edges: [number, number][] = [
+      [0, 1], [1, 2], [2, 3], [3, 0],
+      [4, 5], [5, 6], [6, 7], [7, 4],
+      [0, 4], [1, 5], [2, 6], [3, 7],
+    ];
+
+    const projected = corners.map(c => project(c, vp, width, height));
+    ctx.save();
+    ctx.strokeStyle = '#f1c40f';
+    ctx.lineWidth = 1.5;
+    for (const [a, b] of edges) {
+      const pa = projected[a];
+      const pb = projected[b];
+      if (!pa || !pb) continue;
+      ctx.beginPath();
+      ctx.moveTo(pa[0], pa[1]);
+      ctx.lineTo(pb[0], pb[1]);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }, [entity, collider, width, height]);
 
   const getScreenData = useCallback(() => {
     if (!bridge.isReady) return null;
@@ -47,13 +86,14 @@ export default function GizmoOverlay({ width, height }: { width: number; height:
     const ctx = canvas.getContext('2d')!;
     ctx.clearRect(0, 0, width, height);
     if (!entity || isPlaying) return;
+    drawCollider(ctx);
     const data = getScreenData();
     if (!data?.origin) return;
     const { origin, tips } = data;
     if (gizmoMode === 'translate') drawTranslateGizmo(ctx, origin, tips);
     else if (gizmoMode === 'rotate') drawRotateGizmo(ctx, origin);
     else if (gizmoMode === 'scale')  drawScaleGizmo(ctx, origin, tips);
-  }, [entity, gizmoMode, isPlaying, width, height, getScreenData]);
+  }, [entity, gizmoMode, isPlaying, width, height, getScreenData, drawCollider]);
 
   // Interaction
   useEffect(() => {

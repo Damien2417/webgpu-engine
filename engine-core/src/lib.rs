@@ -1006,7 +1006,13 @@ impl World {
     }
 
     pub fn add_camera(&mut self, id: usize, fov: f32, near: f32, far: f32) {
-        self.cameras.insert(id, CameraComponent { fov, near, far });
+        self.cameras.insert(id, CameraComponent { fov, near, far, follow_entity: true });
+    }
+
+    pub fn set_camera_follow_entity(&mut self, id: usize, follow_entity: bool) {
+        if let Some(cam) = self.cameras.get_mut(id) {
+            cam.follow_entity = follow_entity;
+        }
     }
 
     pub fn set_active_camera(&mut self, id: usize) {
@@ -1757,6 +1763,7 @@ impl World {
             }
             if let Some(cam) = entity_data.camera {
                 self.add_camera(id, cam.fov, cam.near, cam.far);
+                self.set_camera_follow_entity(id, cam.follow_entity);
                 if cam.is_active {
                     self.set_active_camera(id);
                 }
@@ -1832,6 +1839,7 @@ impl World {
                 tag:  self.tags.get(&id).cloned(),
                 camera: self.cameras.get(id).map(|c| SceneCameraComponent {
                     fov: c.fov, near: c.near, far: c.far,
+                    follow_entity: c.follow_entity,
                     is_active: self.active_camera == Some(id),
                 }),
             });
@@ -1843,6 +1851,32 @@ impl World {
 }
 
 impl World {
+    fn build_view_from_transform(t: &Transform) -> glam::Mat4 {
+        use glam::{Mat4, Vec3, Vec4};
+
+        let rot = Mat4::from_euler(
+            EulerRot::XYZ,
+            t.rotation.x.to_radians(),
+            t.rotation.y.to_radians(),
+            t.rotation.z.to_radians(),
+        );
+
+        // Forward in engine convention is -Z in local space.
+        let forward = (rot * Vec4::new(0.0, 0.0, -1.0, 0.0)).truncate().normalize();
+
+        // Build a stable orthonormal basis, even when forward is close to world up.
+        let world_up = Vec3::Y;
+        let up_ref = if forward.dot(world_up).abs() > 0.999 {
+            Vec3::Z
+        } else {
+            world_up
+        };
+        let right = forward.cross(up_ref).normalize();
+        let up = right.cross(forward).normalize();
+
+        Mat4::look_at_rh(t.position, t.position + forward, up)
+    }
+
     fn camera_matrix(&self, aspect: f32) -> glam::Mat4 {
         use glam::Mat4;
         // Priority (game mode only): FPS player > Active camera entity > Orbital camera
@@ -1855,10 +1889,11 @@ impl World {
                     let near = cam.map(|c| c.near).unwrap_or(0.1);
                     let far  = cam.map(|c| c.far).unwrap_or(1000.0);
                     let proj = Mat4::perspective_rh(fov.to_radians(), aspect, near, far);
-                    let yaw   = t.rotation.y.to_radians();
-                    let pitch = t.rotation.x.to_radians();
-                    let forward = glam::Vec3::new(yaw.sin()*pitch.cos(), pitch.sin(), -yaw.cos()*pitch.cos());
-                    let view = Mat4::look_at_rh(t.position, t.position + forward, glam::Vec3::Y);
+                    if cam.map(|c| c.follow_entity).unwrap_or(true) == false {
+                        let view = self.camera.view_matrix();
+                        return proj * view;
+                    }
+                    let view = Self::build_view_from_transform(t);
                     return proj * view;
                 }
             }
@@ -1869,10 +1904,11 @@ impl World {
                     let near = cam.map(|c| c.near).unwrap_or(0.1);
                     let far  = cam.map(|c| c.far).unwrap_or(1000.0);
                     let proj = Mat4::perspective_rh(fov.to_radians(), aspect, near, far);
-                    let yaw   = t.rotation.y.to_radians();
-                    let pitch = t.rotation.x.to_radians();
-                    let forward = glam::Vec3::new(yaw.sin()*pitch.cos(), pitch.sin(), -yaw.cos()*pitch.cos());
-                    let view = Mat4::look_at_rh(t.position, t.position + forward, glam::Vec3::Y);
+                    if cam.map(|c| c.follow_entity).unwrap_or(true) == false {
+                        let view = self.camera.view_matrix();
+                        return proj * view;
+                    }
+                    let view = Self::build_view_from_transform(t);
                     return proj * view;
                 }
             }

@@ -31,9 +31,12 @@ pub struct SceneCameraComponent {
     pub near: f32,
     #[serde(default = "default_far")]
     pub far:  f32,
+    #[serde(default = "default_follow_entity")]
+    pub follow_entity: bool,
     #[serde(default)]
     pub is_active: bool,
 }
+fn default_follow_entity() -> bool { true }
 
 #[derive(Serialize, Deserialize)]
 pub struct SceneMaterial {

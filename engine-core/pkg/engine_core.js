@@ -321,6 +321,13 @@ export class World {
         wasm.world_set_camera(this.__wbg_ptr, ex, ey, ez, tx, ty, tz);
     }
     /**
+     * @param {number} id
+     * @param {boolean} follow_entity
+     */
+    set_camera_follow_entity(id, follow_entity) {
+        wasm.world_set_camera_follow_entity(this.__wbg_ptr, id, follow_entity);
+    }
+    /**
      * Rend un objet émissif (ex: ampoule, néon).
      * r,g,b > 1.0 permet de faire du "bloom" si on avait du post-process,
      * ici cela garantit juste une couleur très vive.

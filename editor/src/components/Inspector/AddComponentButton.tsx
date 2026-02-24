@@ -28,8 +28,18 @@ const DEFAULT_VALUES: Required<EntityComponents> = {
   directionalLight: { dx: 0.3, dy: -1, dz: 0.5, r: 1, g: 0.95, b: 0.8, intensity: 1.5 },
   isPlayer:         true,
   script:           '// onUpdate(entity, engine, deltaMs) {\n//   // your code here\n// }',
-  camera:           { fov: 60, near: 0.1, far: 1000, isActive: false },
-  particle:         { rate: 10, lifetime: 2, speed: 3, spread: 0.3, gravity: 2, color: [1, 0.5, 0] },
+  camera:           { fov: 60, near: 0.1, far: 1000, isActive: false, followEntity: true },
+  particle:         {
+    rate: 20,
+    lifetime: 1.8,
+    speed: 3,
+    spread: 0.3,
+    gravity: 2,
+    sizeStart: 0.16,
+    sizeEnd: 0.02,
+    colorStart: [1.0, 0.65, 0.15],
+    colorEnd: [0.9, 0.1, 0.0],
+  },
 };
 
 export default function AddComponentButton({ entityId }: { entityId: EntityId }) {
@@ -80,6 +90,7 @@ export default function AddComponentButton({ entityId }: { entityId: EntityId })
       case 'camera': {
         const c = DEFAULT_VALUES.camera;
         bridge.addCamera(entityId, c.fov, c.near, c.far);
+        bridge.setCameraFollowEntity(entityId, c.followEntity);
         break;
       }
       case 'script':

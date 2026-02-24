@@ -3,6 +3,7 @@ import { bridge } from '../../engine/engineBridge';
 import { useSceneStore } from '../../store/sceneStore';
 import { useEditorStore } from '../../store/editorStore';
 import { useComponentStore } from '../../store/componentStore';
+import { syncEditorComponentsToEngine } from '../../engine/syncEditorComponents';
 
 export default function MenuBar() {
   const fileRef = useRef<HTMLInputElement>(null);
@@ -55,6 +56,7 @@ export default function MenuBar() {
         if (parsed.engineScene && parsed.editorMeta) {
           bridge.loadScene(JSON.stringify(parsed.engineScene));
           useComponentStore.getState().deserialize(parsed.editorMeta);
+          syncEditorComponentsToEngine();
         } else {
           bridge.loadScene(text);
         }

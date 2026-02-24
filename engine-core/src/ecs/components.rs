@@ -75,11 +75,14 @@ pub struct PointLight {
 // ── Camera ────────────────────────────────────────────────────────────────
 
 pub struct CameraComponent {
-    pub fov:  f32,   // degrees, default 60
-    pub near: f32,   // default 0.1
-    pub far:  f32,   // default 1000.0
+    pub fov:           f32,   // degrees, default 60
+    pub near:          f32,   // default 0.1
+    pub far:           f32,   // default 1000.0
+    pub follow_entity: bool,  // true: use entity transform, false: independent free camera
 }
 
 impl Default for CameraComponent {
-    fn default() -> Self { CameraComponent { fov: 60.0, near: 0.1, far: 1000.0 } }
+    fn default() -> Self {
+        CameraComponent { fov: 60.0, near: 0.1, far: 1000.0, follow_entity: true }
+    }
 }

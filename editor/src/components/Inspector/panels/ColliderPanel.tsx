@@ -15,6 +15,27 @@ export default function ColliderPanel({ entityId }: { entityId: EntityId }) {
 
   return (
     <PanelSection title="Box Collider" onRemove={() => removeComponent(entityId, 'collider')}>
+      <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
+        <button
+          onClick={() => {
+            bridge.fitColliderToMesh(entityId, 0.05);
+            const [hx, hy, hz] = bridge.getCollider(entityId);
+            apply({ hx, hy, hz });
+          }}
+          style={{
+            background: 'var(--bg-hover)',
+            color: 'var(--text)',
+            border: '1px solid var(--border)',
+            borderRadius: 3,
+            fontSize: 11,
+            padding: '2px 6px',
+            cursor: 'pointer',
+          }}
+          title="Fit collider to current mesh bounds"
+        >
+          Fit To Mesh
+        </button>
+      </div>
       {(['hx', 'hy', 'hz'] as const).map(axis => (
         <div key={axis} style={{ display: 'flex', alignItems: 'center', marginBottom: 3, fontSize: 11, gap: 4 }}>
           <span style={{ color: 'var(--text-dim)', width: 70, flexShrink: 0 }}>Half {axis.toUpperCase()}</span>

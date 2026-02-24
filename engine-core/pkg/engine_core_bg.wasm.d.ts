@@ -32,6 +32,7 @@ export const world_save_scene: (a: number) => [number, number];
 export const world_set_active_camera: (a: number, b: number) => void;
 export const world_set_ambient_light: (a: number, b: number, c: number, d: number, e: number) => void;
 export const world_set_camera: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => void;
+export const world_set_camera_follow_entity: (a: number, b: number, c: number) => void;
 export const world_set_emissive: (a: number, b: number, c: number, d: number, e: number) => void;
 export const world_set_entity_name: (a: number, b: number, c: number, d: number) => void;
 export const world_set_game_mode: (a: number, b: number) => void;

@@ -77,6 +77,10 @@ class EngineBridge {
     this.world?.add_camera(id, fov, near, far);
   }
 
+  setCameraFollowEntity(id: EntityId, followEntity: boolean): void {
+    this.world?.set_camera_follow_entity(id, followEntity);
+  }
+
   setActiveCamera(id: EntityId): void {
     this.world?.set_active_camera(id);
   }

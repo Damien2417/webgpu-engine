@@ -28,7 +28,7 @@ interface EditorState {
   redo:       (currentSnap: Snapshot) => Snapshot | null;
 }
 
-export const useEditorStore = create<EditorState>((set) => ({
+export const useEditorStore = create<EditorState>((set, get) => ({
   selectedId:    null,
   gizmoMode:     'translate',
   isPlaying:     false,
@@ -49,20 +49,20 @@ export const useEditorStore = create<EditorState>((set) => ({
     redoStack: [],
   })),
   undo: (currentSnap) => {
-    const s = useEditorStore.getState();
+    const s = get();
     const snap = s.undoStack[s.undoStack.length - 1];
     if (!snap) return null;
-    useEditorStore.setState(prev => ({
+    set(prev => ({
       undoStack: prev.undoStack.slice(0, -1),
       redoStack: [...prev.redoStack.slice(-19), currentSnap],
     }));
     return snap;
   },
   redo: (currentSnap) => {
-    const s = useEditorStore.getState();
+    const s = get();
     const snap = s.redoStack[s.redoStack.length - 1];
     if (!snap) return null;
-    useEditorStore.setState(prev => ({
+    set(prev => ({
       redoStack: prev.redoStack.slice(0, -1),
       undoStack: [...prev.undoStack.slice(-19), currentSnap],
     }));
