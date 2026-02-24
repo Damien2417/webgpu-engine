@@ -1450,7 +1450,7 @@ impl World {
                     normal_tex: normal_id,
                     metallic:   mat.metallic,
                     roughness:  mat.roughness,
-                    emissive:   glam::Vec3::ZERO,
+                    emissive:   glam::Vec3::from(mat.emissive.unwrap_or([0.0, 0.0, 0.0])),
                 });
             }
 
@@ -1469,6 +1469,16 @@ impl World {
                     color:     glam::Vec3::from(pl.color),
                     intensity: pl.intensity,
                 });
+            }
+
+            if let Some(mt) = &entity_data.mesh_type {
+                self.set_mesh_type(id, mt);
+            }
+            if let Some(name) = entity_data.name.clone() {
+                self.set_entity_name(id, name);
+            }
+            if let Some(tag) = &entity_data.tag {
+                self.set_tag(id, tag);
             }
         }
 
@@ -1516,6 +1526,7 @@ impl World {
                 normal_texture: id_to_name.get(&m.normal_tex).cloned().unwrap_or_default(),
                 metallic:       m.metallic,
                 roughness:      m.roughness,
+                emissive:       Some(m.emissive.to_array()),
             });
             let rigid_body = self.rigid_bodies.get(id).map(|rb| SceneRigidBody {
                 is_static: rb.is_static,
@@ -1528,6 +1539,13 @@ impl World {
 
             entities.push(SceneEntityData {
                 transform, mesh_renderer, material, rigid_body, collider_aabb, point_light,
+                mesh_type: self.mesh_renderers.get(id).map(|mr| match mr.mesh_type {
+                    MeshType::Cube  => "cube".to_string(),
+                    MeshType::Plane => "plane".to_string(),
+                    _               => "cube".to_string(),
+                }),
+                name: self.entity_names.get(&id).cloned(),
+                tag:  self.tags.get(&id).cloned(),
             });
         }
 
@@ -1578,8 +1596,18 @@ impl World {
             self.rigid_bodies.remove(id);
             self.colliders.remove(id);
             self.point_lights.remove(id);
-            self.tags.remove(&id);
         }
+
+        // Reset next_id to 0 (or just after max persistent entity ID)
+        self.next_id = self.persistent_entities
+            .iter()
+            .max()
+            .map(|&m| m + 1)
+            .unwrap_or(0);
+        // Clear entity_names for removed entities
+        self.entity_names.retain(|id, _| self.persistent_entities.contains(id));
+        // Retain tags only for persistent entities
+        self.tags.retain(|id, _| self.persistent_entities.contains(id));
 
         self.directional_light = None;
     }

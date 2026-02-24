@@ -24,11 +24,13 @@ fn default_roughness() -> f32 { 0.5 }
 pub struct SceneMaterial {
     pub texture: String,
     #[serde(default)]
-    pub normal_texture: String,          // "" = pas de normal map
+    pub normal_texture: String,
     #[serde(default = "default_metallic")]
     pub metallic: f32,
     #[serde(default = "default_roughness")]
     pub roughness: f32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub emissive: Option<[f32; 3]>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -50,7 +52,6 @@ pub struct SceneDirectionalLight {
 }
 
 /// Représente une entité dans le JSON de scène.
-/// Tous les composants sont optionnels.
 #[derive(Serialize, Deserialize, Default)]
 pub struct SceneEntityData {
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -65,6 +66,12 @@ pub struct SceneEntityData {
     pub collider_aabb: Option<[f32; 3]>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub point_light:   Option<ScenePointLight>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mesh_type: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tag: Option<String>,
 }
 
 /// Structure top-level du fichier JSON de scène.
