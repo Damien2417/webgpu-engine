@@ -88,6 +88,10 @@ class EngineBridge {
     this.world?.add_material(entityId, texId);
   }
 
+  registerTexture(name: string, textureId: number): void {
+    this.world?.register_texture(name, textureId);
+  }
+
   // ── Matériaux PBR ────────────────────────────────────────────────────────────
 
   addPbrMaterial(entityId: EntityId, texId: number, metallic: number, roughness: number): void {
@@ -122,6 +126,16 @@ class EngineBridge {
     this.world?.add_collider_aabb(entityId, hx, hy, hz);
   }
 
+  fitColliderToMesh(entityId: EntityId, minHalfY = 0.05): void {
+    this.world?.fit_collider_to_mesh(entityId, minHalfY);
+  }
+
+  getCollider(entityId: EntityId): [number, number, number] {
+    const a = this.world?.get_collider_array(entityId);
+    if (!a) return [0, 0, 0];
+    return [a[0], a[1], a[2]];
+  }
+
   // ── Lumières ─────────────────────────────────────────────────────────────────
 
   addPointLight(entityId: EntityId, r: number, g: number, b: number, intensity: number): void {
@@ -130,6 +144,20 @@ class EngineBridge {
 
   addDirectionalLight(dx: number, dy: number, dz: number, r: number, g: number, b: number, intensity: number): void {
     this.world?.add_directional_light(dx, dy, dz, r, g, b, intensity);
+  }
+
+  setAmbientLight(r: number, g: number, b: number, intensity: number): void {
+    this.world?.set_ambient_light(r, g, b, intensity);
+  }
+
+  getVelocity(id: EntityId): [number, number, number] {
+    const a = this.world?.get_velocity(id);
+    if (!a) return [0, 0, 0];
+    return [a[0], a[1], a[2]];
+  }
+
+  setVelocity(id: EntityId, x: number, y: number, z: number): void {
+    this.world?.set_velocity(id, x, y, z);
   }
 
   // ── Player / Input ────────────────────────────────────────────────────────────

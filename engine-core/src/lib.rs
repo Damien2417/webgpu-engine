@@ -40,6 +40,13 @@ struct TextureGpu {
     view:    wgpu::TextureView,
 }
 
+struct CustomMeshGpu {
+    vertex_buffer:      wgpu::Buffer,
+    index_buffer:       wgpu::Buffer,
+    index_count:        u32,
+    local_half_extents: glam::Vec3,
+}
+
 
 
 // ── Types GPU pour l'éclairage ────────────────────────────────────────────
@@ -81,8 +88,9 @@ struct LightUniforms {
     _pad:            [u32; 3],            //  12 bytes — offset  52
     points:          [GpuPointLight; 8],  // 256 bytes — offset  64
     light_space_mat: [[f32; 4]; 4],       //  64 bytes — offset 320
+    ambient_color:   [f32; 4],            //  16 bytes — offset 384
 }
-// Total : 384 bytes
+// Total : 400 bytes
 
 /// Données CPU pour la lumière directionnelle unique.
 struct DirectionalLightData {
@@ -151,7 +159,19 @@ pub struct World {
     texture_registry:    HashMap<String, u32>,
     entity_names:        HashMap<usize, String>,
     tags:                HashMap<usize, String>,
-    custom_meshes: Vec<(wgpu::Buffer, wgpu::Buffer, u32)>,
+    custom_meshes: Vec<CustomMeshGpu>,
+
+    // Sphere / Cylinder built-in meshes
+    sphere_vbuf:       wgpu::Buffer,
+    sphere_ibuf:       wgpu::Buffer,
+    sphere_ilen:       u32,
+    cylinder_vbuf:     wgpu::Buffer,
+    cylinder_ibuf:     wgpu::Buffer,
+    cylinder_ilen:     u32,
+
+    // Ambient light
+    ambient_color:     glam::Vec3,
+    ambient_intensity: f32,
 }
 
 fn create_depth_texture(
@@ -461,6 +481,8 @@ impl World {
         let light_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label:              Some("light_buffer"),
             size:               std::mem::size_of::<LightUniforms>() as u64,
+            // Round up to next multiple of 16 for WebGPU uniform buffer alignment.
+            // LightUniforms is 400 bytes which is already a multiple of 16.
             usage:              wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
@@ -664,6 +686,24 @@ impl World {
             usage:    wgpu::BufferUsages::INDEX,
         });
 
+        use mesh::{generate_sphere, generate_cylinder};
+        let (sv, si) = generate_sphere(16);
+        let sphere_vbuf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("sphere_vbuf"), contents: bytemuck::cast_slice(&sv), usage: wgpu::BufferUsages::VERTEX,
+        });
+        let sphere_ibuf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("sphere_ibuf"), contents: bytemuck::cast_slice(&si), usage: wgpu::BufferUsages::INDEX,
+        });
+        let sphere_ilen = si.len() as u32;
+        let (cv, ci) = generate_cylinder(16);
+        let cylinder_vbuf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("cyl_vbuf"), contents: bytemuck::cast_slice(&cv), usage: wgpu::BufferUsages::VERTEX,
+        });
+        let cylinder_ibuf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("cyl_ibuf"), contents: bytemuck::cast_slice(&ci), usage: wgpu::BufferUsages::INDEX,
+        });
+        let cylinder_ilen = ci.len() as u32;
+
         web_sys::console::log_1(&"[World] Pipeline 3D initialisée".into());
 
         Ok(World {
@@ -712,6 +752,10 @@ impl World {
             entity_names:        HashMap::new(),
             tags:                HashMap::new(),
             custom_meshes:       Vec::new(),
+            sphere_vbuf, sphere_ibuf, sphere_ilen,
+            cylinder_vbuf, cylinder_ibuf, cylinder_ilen,
+            ambient_color: glam::Vec3::new(0.1, 0.1, 0.1),
+            ambient_intensity: 0.5,
         })
     }
 }
@@ -880,6 +924,19 @@ impl World {
     /// Upload custom mesh. vertices: flat f32 array (15 per vertex), indices: u32 array.
     /// Returns custom mesh index for use with set_mesh_type("custom:N").
     pub fn upload_custom_mesh(&mut self, vertices: &[f32], indices: &[u32]) -> usize {
+        let local_half_extents = if vertices.len() >= 15 {
+            let mut min = glam::Vec3::splat(f32::INFINITY);
+            let mut max = glam::Vec3::splat(f32::NEG_INFINITY);
+            for i in (0..vertices.len()).step_by(15) {
+                let p = glam::Vec3::new(vertices[i], vertices[i + 1], vertices[i + 2]);
+                min = min.min(p);
+                max = max.max(p);
+            }
+            (max - min) * 0.5
+        } else {
+            glam::Vec3::splat(0.5)
+        };
+
         let vbuf = self.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label:    Some("custom_vbuf"),
             contents: bytemuck::cast_slice(vertices),
@@ -891,18 +948,25 @@ impl World {
             usage:    wgpu::BufferUsages::INDEX,
         });
         let idx = self.custom_meshes.len();
-        self.custom_meshes.push((vbuf, ibuf, indices.len() as u32));
+        self.custom_meshes.push(CustomMeshGpu {
+            vertex_buffer: vbuf,
+            index_buffer: ibuf,
+            index_count: indices.len() as u32,
+            local_half_extents,
+        });
         idx
     }
 
-    /// Change le type de mesh d'une entité existante ("cube" ou "plane").
+    /// Change le type de mesh d'une entité existante.
     pub fn set_mesh_type(&mut self, id: usize, mesh_type: &str) {
         let mt = if let Some(n) = mesh_type.strip_prefix("custom:") {
             MeshType::Custom(n.parse().unwrap_or(0))
         } else {
             match mesh_type {
-                "plane" => MeshType::Plane,
-                _       => MeshType::Cube,
+                "plane"    => MeshType::Plane,
+                "sphere"   => MeshType::Sphere,
+                "cylinder" => MeshType::Cylinder,
+                _          => MeshType::Cube,
             }
         };
         if let Some(mr) = self.mesh_renderers.get_mut(id) {
@@ -910,13 +974,15 @@ impl World {
         }
     }
 
-    /// Retourne le type de mesh d'une entité ("cube" | "plane").
+    /// Retourne le type de mesh d'une entité ("cube" | "plane" | "sphere" | "cylinder" | "custom:N").
     pub fn get_mesh_type(&self, id: usize) -> String {
         match self.mesh_renderers.get(id) {
             Some(mr) => match &mr.mesh_type {
                 MeshType::Cube       => "cube".to_string(),
                 MeshType::Plane      => "plane".to_string(),
                 MeshType::Custom(n)  => format!("custom:{}", n),
+                MeshType::Sphere     => "sphere".to_string(),
+                MeshType::Cylinder   => "cylinder".to_string(),
             },
             None => "cube".to_string(),
         }
@@ -1020,7 +1086,7 @@ impl World {
 
         // ── Upload EntityUniforms (MVP + model + metallic + roughness) ────────
         for (id, transform) in self.transforms.iter() {
-            if self.mesh_renderers.get(id).is_none() { continue; }
+            let Some(mesh_renderer) = self.mesh_renderers.get(id) else { continue };
             let Some(gpu) = self.entity_gpus.get(id) else { continue };
 
             let model = Mat4::from_translation(transform.position)
@@ -1037,13 +1103,20 @@ impl World {
                 .map(|m| (m.metallic, m.roughness, m.emissive))
                 .unwrap_or((0.0, 0.5, glam::Vec3::ZERO));
 
+            // UV tiling by transform scale is useful for primitives,
+            // but breaks authored UVs on imported custom meshes / spherical/cylindrical UVs.
+            let uv_scale = match mesh_renderer.mesh_type {
+                MeshType::Custom(_) | MeshType::Sphere | MeshType::Cylinder => [1.0, 1.0, 1.0, 0.0],
+                _ => [transform.scale.x, transform.scale.y, transform.scale.z, 0.0],
+            };
+
             let uniforms = EntityUniforms {
                 mvp:   mvp.to_cols_array_2d(),
                 model: model.to_cols_array_2d(),
                 metallic,
                 roughness,
                 _pad1:    [0.0; 2],
-                scale:    [transform.scale.x, transform.scale.y, transform.scale.z, 0.0],
+                scale:    uv_scale,
                 emissive: emissive.to_array(),
                 _pad2:    0.0,
             };
@@ -1083,6 +1156,12 @@ impl World {
                 n += 1;
             }
             lu.n_points = n as u32;
+            lu.ambient_color = [
+                self.ambient_color.x * self.ambient_intensity,
+                self.ambient_color.y * self.ambient_intensity,
+                self.ambient_color.z * self.ambient_intensity,
+                self.ambient_intensity,
+            ];
             self.queue.write_buffer(&self.light_buffer, 0, bytemuck::bytes_of(&lu));
         }
 
@@ -1121,12 +1200,24 @@ impl World {
                         shadow_pass.set_bind_group(0, &gpu.shadow_bind_group, &[]);
                         shadow_pass.draw_indexed(0..PLANE_INDICES.len() as u32, 0, 0..1);
                     },
+                    MeshType::Sphere => {
+                        shadow_pass.set_vertex_buffer(0, self.sphere_vbuf.slice(..));
+                        shadow_pass.set_index_buffer(self.sphere_ibuf.slice(..), wgpu::IndexFormat::Uint32);
+                        shadow_pass.set_bind_group(0, &gpu.shadow_bind_group, &[]);
+                        shadow_pass.draw_indexed(0..self.sphere_ilen, 0, 0..1);
+                    },
+                    MeshType::Cylinder => {
+                        shadow_pass.set_vertex_buffer(0, self.cylinder_vbuf.slice(..));
+                        shadow_pass.set_index_buffer(self.cylinder_ibuf.slice(..), wgpu::IndexFormat::Uint32);
+                        shadow_pass.set_bind_group(0, &gpu.shadow_bind_group, &[]);
+                        shadow_pass.draw_indexed(0..self.cylinder_ilen, 0, 0..1);
+                    },
                     MeshType::Custom(n) => {
                         if let Some(cm) = self.custom_meshes.get(*n) {
-                            shadow_pass.set_vertex_buffer(0, cm.0.slice(..));
-                            shadow_pass.set_index_buffer(cm.1.slice(..), wgpu::IndexFormat::Uint32);
+                            shadow_pass.set_vertex_buffer(0, cm.vertex_buffer.slice(..));
+                            shadow_pass.set_index_buffer(cm.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
                             shadow_pass.set_bind_group(0, &gpu.shadow_bind_group, &[]);
-                            shadow_pass.draw_indexed(0..cm.2, 0, 0..1);
+                            shadow_pass.draw_indexed(0..cm.index_count, 0, 0..1);
                         }
                     },
                 };
@@ -1198,11 +1289,21 @@ impl World {
                         pass.set_index_buffer(self.plane_index_buffer.slice(..), wgpu::IndexFormat::Uint16);
                         pass.draw_indexed(0..PLANE_INDICES.len() as u32, 0, 0..1);
                     },
+                    MeshType::Sphere => {
+                        pass.set_vertex_buffer(0, self.sphere_vbuf.slice(..));
+                        pass.set_index_buffer(self.sphere_ibuf.slice(..), wgpu::IndexFormat::Uint32);
+                        pass.draw_indexed(0..self.sphere_ilen, 0, 0..1);
+                    },
+                    MeshType::Cylinder => {
+                        pass.set_vertex_buffer(0, self.cylinder_vbuf.slice(..));
+                        pass.set_index_buffer(self.cylinder_ibuf.slice(..), wgpu::IndexFormat::Uint32);
+                        pass.draw_indexed(0..self.cylinder_ilen, 0, 0..1);
+                    },
                     MeshType::Custom(n) => {
                         if let Some(cm) = self.custom_meshes.get(*n) {
-                            pass.set_vertex_buffer(0, cm.0.slice(..));
-                            pass.set_index_buffer(cm.1.slice(..), wgpu::IndexFormat::Uint32);
-                            pass.draw_indexed(0..cm.2, 0, 0..1);
+                            pass.set_vertex_buffer(0, cm.vertex_buffer.slice(..));
+                            pass.set_index_buffer(cm.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
+                            pass.draw_indexed(0..cm.index_count, 0, 0..1);
                         }
                     },
                 };
@@ -1233,6 +1334,40 @@ impl World {
         self.colliders.insert(id, Collider {
             half_extents: glam::Vec3::new(hx, hy, hz),
         });
+    }
+
+    /// Retourne [hx, hy, hz] du collider, ou [0,0,0] si absent.
+    pub fn get_collider_array(&self, id: usize) -> js_sys::Float32Array {
+        let mut out = [0.0_f32; 3];
+        if let Some(c) = self.colliders.get(id) {
+            out[0] = c.half_extents.x;
+            out[1] = c.half_extents.y;
+            out[2] = c.half_extents.z;
+        }
+        js_sys::Float32Array::from(&out[..])
+    }
+
+    /// Ajuste automatiquement le Box Collider à la taille du mesh visuel.
+    /// `min_half_y` évite un collider trop fin (utile pour les planes).
+    pub fn fit_collider_to_mesh(&mut self, id: usize, min_half_y: f32) {
+        let Some(mr) = self.mesh_renderers.get(id) else { return };
+        let min_y = min_half_y.max(0.001);
+        let he = match &mr.mesh_type {
+            MeshType::Cube     => glam::Vec3::new(0.5, 0.5, 0.5),
+            MeshType::Plane    => glam::Vec3::new(0.5, min_y, 0.5),
+            MeshType::Sphere   => glam::Vec3::new(0.5, 0.5, 0.5),
+            MeshType::Cylinder => glam::Vec3::new(0.5, 0.5, 0.5),
+            MeshType::Custom(n) => self.custom_meshes
+                .get(*n)
+                .map(|cm| glam::Vec3::new(
+                    cm.local_half_extents.x.max(0.001),
+                    cm.local_half_extents.y.max(min_y),
+                    cm.local_half_extents.z.max(0.001),
+                ))
+                .unwrap_or(glam::Vec3::new(0.5, 0.5, 0.5)),
+        };
+
+        self.colliders.insert(id, Collider { half_extents: he });
     }
 
     // ── Input ────────────────────────────────────────────────────────────────
@@ -1334,7 +1469,7 @@ impl World {
                     self.transforms.get(dyn_id),
                     self.colliders.get(dyn_id),
                 ) {
-                    (Some(tr), Some(co)) => (tr.position, co.half_extents),
+                    (Some(tr), Some(co)) => (tr.position, co.half_extents * tr.scale.abs()),
                     _ => continue,
                 };
 
@@ -1342,7 +1477,7 @@ impl World {
                     self.transforms.get(sta_id),
                     self.colliders.get(sta_id),
                 ) {
-                    (Some(tr), Some(co)) => (tr.position, co.half_extents),
+                    (Some(tr), Some(co)) => (tr.position, co.half_extents * tr.scale.abs()),
                     _ => continue,
                 };
 
@@ -1368,6 +1503,44 @@ impl World {
         }
 
         // ── 5. Caméra FPS ────────────────────────────────────────────────────
+        // Dynamic vs dynamic AABB resolution (prevents pass-through between moving bodies).
+        for i in 0..dynamic_ids.len() {
+            for j in (i + 1)..dynamic_ids.len() {
+                let a_id = dynamic_ids[i];
+                let b_id = dynamic_ids[j];
+
+                let (a_pos, a_he) = match (self.transforms.get(a_id), self.colliders.get(a_id)) {
+                    (Some(tr), Some(co)) => (tr.position, co.half_extents * tr.scale.abs()),
+                    _ => continue,
+                };
+                let (b_pos, b_he) = match (self.transforms.get(b_id), self.colliders.get(b_id)) {
+                    (Some(tr), Some(co)) => (tr.position, co.half_extents * tr.scale.abs()),
+                    _ => continue,
+                };
+
+                let Some(mtv) = aabb_mtv(a_pos, a_he, b_pos, b_he) else { continue };
+                let half = mtv * 0.5;
+
+                if let Some(tr) = self.transforms.get_mut(a_id) {
+                    tr.position -= half;
+                }
+                if let Some(tr) = self.transforms.get_mut(b_id) {
+                    tr.position += half;
+                }
+
+                if let Some(rb) = self.rigid_bodies.get_mut(a_id) {
+                    if mtv.x.abs() > 0.0 { rb.velocity.x = 0.0; }
+                    if mtv.y.abs() > 0.0 { rb.velocity.y = 0.0; }
+                    if mtv.z.abs() > 0.0 { rb.velocity.z = 0.0; }
+                }
+                if let Some(rb) = self.rigid_bodies.get_mut(b_id) {
+                    if mtv.x.abs() > 0.0 { rb.velocity.x = 0.0; }
+                    if mtv.y.abs() > 0.0 { rb.velocity.y = 0.0; }
+                    if mtv.z.abs() > 0.0 { rb.velocity.z = 0.0; }
+                }
+            }
+        }
+
         if let Some(pid) = self.player_entity {
             if let Some(tr) = self.transforms.get(pid) {
                 let eye   = tr.position + glam::Vec3::new(0.0, 1.6, 0.0);
@@ -1411,6 +1584,28 @@ impl World {
             color:     glam::Vec3::new(r, g, b),
             intensity,
         });
+    }
+
+    /// Définit la lumière ambiante globale.
+    pub fn set_ambient_light(&mut self, r: f32, g: f32, b: f32, intensity: f32) {
+        self.ambient_color     = glam::Vec3::new(r, g, b);
+        self.ambient_intensity = intensity;
+    }
+
+    /// Retourne la velocity [vx, vy, vz] d'un RigidBody, ou [0,0,0] si absent.
+    pub fn get_velocity(&self, id: usize) -> js_sys::Float32Array {
+        if let Some(rb) = self.rigid_bodies.get(id) {
+            js_sys::Float32Array::from([rb.velocity.x, rb.velocity.y, rb.velocity.z].as_slice())
+        } else {
+            js_sys::Float32Array::from([0f32; 3].as_slice())
+        }
+    }
+
+    /// Définit la velocity d'un RigidBody.
+    pub fn set_velocity(&mut self, id: usize, x: f32, y: f32, z: f32) {
+        if let Some(rb) = self.rigid_bodies.get_mut(id) {
+            rb.velocity = glam::Vec3::new(x, y, z);
+        }
     }
 }
 
@@ -1589,6 +1784,8 @@ impl World {
                     MeshType::Cube       => "cube".to_string(),
                     MeshType::Plane      => "plane".to_string(),
                     MeshType::Custom(n)  => format!("custom:{}", n),
+                    MeshType::Sphere     => "sphere".to_string(),
+                    MeshType::Cylinder   => "cylinder".to_string(),
                 }),
                 name: self.entity_names.get(&id).cloned(),
                 tag:  self.tags.get(&id).cloned(),

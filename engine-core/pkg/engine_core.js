@@ -106,6 +106,24 @@ export class World {
         return ret >>> 0;
     }
     /**
+     * Ajuste automatiquement le Box Collider à la taille du mesh visuel.
+     * `min_half_y` évite un collider trop fin (utile pour les planes).
+     * @param {number} id
+     * @param {number} min_half_y
+     */
+    fit_collider_to_mesh(id, min_half_y) {
+        wasm.world_fit_collider_to_mesh(this.__wbg_ptr, id, min_half_y);
+    }
+    /**
+     * Retourne [hx, hy, hz] du collider, ou [0,0,0] si absent.
+     * @param {number} id
+     * @returns {Float32Array}
+     */
+    get_collider_array(id) {
+        const ret = wasm.world_get_collider_array(this.__wbg_ptr, id);
+        return ret;
+    }
+    /**
      * Retourne le premier ID d'entité ayant ce tag, ou u32::MAX si aucun.
      * @param {string} tag
      * @returns {number}
@@ -142,7 +160,7 @@ export class World {
         }
     }
     /**
-     * Retourne le type de mesh d'une entité ("cube" | "plane").
+     * Retourne le type de mesh d'une entité ("cube" | "plane" | "sphere" | "cylinder" | "custom:N").
      * @param {number} id
      * @returns {string}
      */
@@ -183,6 +201,15 @@ export class World {
      */
     get_transform_array(id) {
         const ret = wasm.world_get_transform_array(this.__wbg_ptr, id);
+        return ret;
+    }
+    /**
+     * Retourne la velocity [vx, vy, vz] d'un RigidBody, ou [0,0,0] si absent.
+     * @param {number} id
+     * @returns {Float32Array}
+     */
+    get_velocity(id) {
+        const ret = wasm.world_get_velocity(this.__wbg_ptr, id);
         return ret;
     }
     /**
@@ -255,6 +282,16 @@ export class World {
         }
     }
     /**
+     * Définit la lumière ambiante globale.
+     * @param {number} r
+     * @param {number} g
+     * @param {number} b
+     * @param {number} intensity
+     */
+    set_ambient_light(r, g, b, intensity) {
+        wasm.world_set_ambient_light(this.__wbg_ptr, r, g, b, intensity);
+    }
+    /**
      * @param {number} ex
      * @param {number} ey
      * @param {number} ez
@@ -299,7 +336,7 @@ export class World {
         wasm.world_set_input(this.__wbg_ptr, keys, mouse_dx, mouse_dy);
     }
     /**
-     * Change le type de mesh d'une entité existante ("cube" ou "plane").
+     * Change le type de mesh d'une entité existante.
      * @param {number} id
      * @param {string} mesh_type
      */
@@ -368,6 +405,16 @@ export class World {
         const ptr0 = passStringToWasm0(tag, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
         const len0 = WASM_VECTOR_LEN;
         wasm.world_set_tag(this.__wbg_ptr, id, ptr0, len0);
+    }
+    /**
+     * Définit la velocity d'un RigidBody.
+     * @param {number} id
+     * @param {number} x
+     * @param {number} y
+     * @param {number} z
+     */
+    set_velocity(id, x, y, z) {
+        wasm.world_set_velocity(this.__wbg_ptr, id, x, y, z);
     }
     /**
      * Met à jour la physique et la caméra FPS. Appeler avant render_frame().

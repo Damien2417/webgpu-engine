@@ -37,6 +37,7 @@ struct LightUniforms {
     pad0: u32, pad1: u32, pad2: u32,
     points:          array<GpuPointLight, 8>,
     light_space_mat: mat4x4<f32>,
+    ambient_color:   vec4<f32>,  // rgb + intensity in w
 }
 @group(2) @binding(0) var<uniform> lights: LightUniforms;
 
@@ -206,11 +207,11 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
         Lo += (kD * albedo_srgb / PI + spec) * radiance * NdL;
     }
 
-    // Ambient IBL simplifié
-    let ambient = vec3<f32>(0.03) * albedo_srgb;
-    
+    // Ambient light (driven by set_ambient_light)
+    let ambient = lights.ambient_color.rgb * lights.ambient_color.w * albedo_srgb;
+
     // Ajout de l'émissif (ne dépend pas de la lumière, s'ajoute à la fin)
-    let color = ambient + Lo + (albedo_srgb * entity.emissive); 
+    let color = ambient + Lo + (albedo_srgb * entity.emissive);
 
     // Tone mapping Reinhard
     let mapped = color / (color + vec3<f32>(1.0));

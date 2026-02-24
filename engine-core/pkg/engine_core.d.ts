@@ -44,6 +44,15 @@ export class World {
      */
     create_entity(): number;
     /**
+     * Ajuste automatiquement le Box Collider à la taille du mesh visuel.
+     * `min_half_y` évite un collider trop fin (utile pour les planes).
+     */
+    fit_collider_to_mesh(id: number, min_half_y: number): void;
+    /**
+     * Retourne [hx, hy, hz] du collider, ou [0,0,0] si absent.
+     */
+    get_collider_array(id: number): Float32Array;
+    /**
      * Retourne le premier ID d'entité ayant ce tag, ou u32::MAX si aucun.
      */
     get_entity_by_tag(tag: string): number;
@@ -56,7 +65,7 @@ export class World {
      */
     get_entity_name(id: number): string;
     /**
-     * Retourne le type de mesh d'une entité ("cube" | "plane").
+     * Retourne le type de mesh d'une entité ("cube" | "plane" | "sphere" | "cylinder" | "custom:N").
      */
     get_mesh_type(id: number): string;
     /**
@@ -68,6 +77,10 @@ export class World {
      * Retourne 9 zéros si l'entité n'a pas de Transform.
      */
     get_transform_array(id: number): Float32Array;
+    /**
+     * Retourne la velocity [vx, vy, vz] d'un RigidBody, ou [0,0,0] si absent.
+     */
+    get_velocity(id: number): Float32Array;
     /**
      * Retourne la matrice view*proj [16 f32, column-major] pour les gizmos.
      */
@@ -93,6 +106,10 @@ export class World {
      * Sérialise la scène courante (toutes les entités) en JSON string.
      */
     save_scene(): string;
+    /**
+     * Définit la lumière ambiante globale.
+     */
+    set_ambient_light(r: number, g: number, b: number, intensity: number): void;
     set_camera(ex: number, ey: number, ez: number, tx: number, ty: number, tz: number): void;
     /**
      * Rend un objet émissif (ex: ampoule, néon).
@@ -111,7 +128,7 @@ export class World {
      */
     set_input(keys: number, mouse_dx: number, mouse_dy: number): void;
     /**
-     * Change le type de mesh d'une entité existante ("cube" ou "plane").
+     * Change le type de mesh d'une entité existante.
      */
     set_mesh_type(id: number, mesh_type: string): void;
     /**
@@ -134,6 +151,10 @@ export class World {
      * Assigne un tag string à une entité. Remplace le tag précédent s'il en avait un.
      */
     set_tag(id: number, tag: string): void;
+    /**
+     * Définit la velocity d'un RigidBody.
+     */
+    set_velocity(id: number, x: number, y: number, z: number): void;
     /**
      * Met à jour la physique et la caméra FPS. Appeler avant render_frame().
      */
@@ -164,12 +185,15 @@ export interface InitOutput {
     readonly world_add_rigid_body: (a: number, b: number, c: number) => void;
     readonly world_add_transform: (a: number, b: number, c: number, d: number, e: number) => void;
     readonly world_create_entity: (a: number) => number;
+    readonly world_fit_collider_to_mesh: (a: number, b: number, c: number) => void;
+    readonly world_get_collider_array: (a: number, b: number) => any;
     readonly world_get_entity_by_tag: (a: number, b: number, c: number) => number;
     readonly world_get_entity_ids: (a: number) => any;
     readonly world_get_entity_name: (a: number, b: number) => [number, number];
     readonly world_get_mesh_type: (a: number, b: number) => [number, number];
     readonly world_get_tag: (a: number, b: number) => [number, number];
     readonly world_get_transform_array: (a: number, b: number) => any;
+    readonly world_get_velocity: (a: number, b: number) => any;
     readonly world_get_view_proj: (a: number) => any;
     readonly world_load_scene: (a: number, b: number, c: number) => any;
     readonly world_new: (a: any) => any;
@@ -177,6 +201,7 @@ export interface InitOutput {
     readonly world_remove_entity: (a: number, b: number) => void;
     readonly world_render_frame: (a: number, b: number) => void;
     readonly world_save_scene: (a: number) => [number, number];
+    readonly world_set_ambient_light: (a: number, b: number, c: number, d: number, e: number) => void;
     readonly world_set_camera: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => void;
     readonly world_set_emissive: (a: number, b: number, c: number, d: number, e: number) => void;
     readonly world_set_entity_name: (a: number, b: number, c: number, d: number) => void;
@@ -189,6 +214,7 @@ export interface InitOutput {
     readonly world_set_rotation: (a: number, b: number, c: number, d: number, e: number) => void;
     readonly world_set_scale: (a: number, b: number, c: number, d: number, e: number) => void;
     readonly world_set_tag: (a: number, b: number, c: number, d: number) => void;
+    readonly world_set_velocity: (a: number, b: number, c: number, d: number, e: number) => void;
     readonly world_update: (a: number, b: number) => void;
     readonly world_upload_custom_mesh: (a: number, b: number, c: number, d: number, e: number) => number;
     readonly world_upload_texture: (a: number, b: number, c: number, d: number, e: number, f: number) => number;

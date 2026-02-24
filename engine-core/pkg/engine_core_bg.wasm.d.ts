@@ -11,12 +11,15 @@ export const world_add_point_light: (a: number, b: number, c: number, d: number,
 export const world_add_rigid_body: (a: number, b: number, c: number) => void;
 export const world_add_transform: (a: number, b: number, c: number, d: number, e: number) => void;
 export const world_create_entity: (a: number) => number;
+export const world_fit_collider_to_mesh: (a: number, b: number, c: number) => void;
+export const world_get_collider_array: (a: number, b: number) => any;
 export const world_get_entity_by_tag: (a: number, b: number, c: number) => number;
 export const world_get_entity_ids: (a: number) => any;
 export const world_get_entity_name: (a: number, b: number) => [number, number];
 export const world_get_mesh_type: (a: number, b: number) => [number, number];
 export const world_get_tag: (a: number, b: number) => [number, number];
 export const world_get_transform_array: (a: number, b: number) => any;
+export const world_get_velocity: (a: number, b: number) => any;
 export const world_get_view_proj: (a: number) => any;
 export const world_load_scene: (a: number, b: number, c: number) => any;
 export const world_new: (a: any) => any;
@@ -24,6 +27,7 @@ export const world_register_texture: (a: number, b: number, c: number, d: number
 export const world_remove_entity: (a: number, b: number) => void;
 export const world_render_frame: (a: number, b: number) => void;
 export const world_save_scene: (a: number) => [number, number];
+export const world_set_ambient_light: (a: number, b: number, c: number, d: number, e: number) => void;
 export const world_set_camera: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => void;
 export const world_set_emissive: (a: number, b: number, c: number, d: number, e: number) => void;
 export const world_set_entity_name: (a: number, b: number, c: number, d: number) => void;
@@ -36,6 +40,7 @@ export const world_set_position: (a: number, b: number, c: number, d: number, e:
 export const world_set_rotation: (a: number, b: number, c: number, d: number, e: number) => void;
 export const world_set_scale: (a: number, b: number, c: number, d: number, e: number) => void;
 export const world_set_tag: (a: number, b: number, c: number, d: number) => void;
+export const world_set_velocity: (a: number, b: number, c: number, d: number, e: number) => void;
 export const world_update: (a: number, b: number) => void;
 export const world_upload_custom_mesh: (a: number, b: number, c: number, d: number, e: number) => number;
 export const world_upload_texture: (a: number, b: number, c: number, d: number, e: number, f: number) => number;
