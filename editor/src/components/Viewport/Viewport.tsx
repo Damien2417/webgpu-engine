@@ -5,7 +5,7 @@ import { useSceneStore } from '../../store/sceneStore';
 import { useAssetStore } from '../../store/assetStore';
 import { useCustomMeshStore } from '../../store/customMeshStore';
 import GizmoOverlay from './GizmoOverlay';
-import { initScripts, tickScripts } from '../../engine/scriptRunner';
+import { initScripts, tickScripts, clearInputTracking } from '../../engine/scriptRunner';
 import { tickParticles, clearParticles } from '../../engine/particleSystem';
 import { hydrateAssetLibraryFromBackend, restoreSessionFromLocalStorage } from '../../engine/sessionPersistence';
 
@@ -275,6 +275,7 @@ export default function Viewport() {
       bridge.stopLoop();
       bridge.setGameMode(false);  // restore orbital camera for editor
       clearParticles();
+      clearInputTracking();
       bridge.setInput(0, 0, 0);
       document.exitPointerLock();
     };
