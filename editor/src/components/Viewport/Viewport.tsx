@@ -26,6 +26,7 @@ export default function Viewport() {
   const [dims, setDims] = useState({ w: 0, h: 0 });
   const [fps, setFps] = useState(0);
   const fpsRef = useRef({ frames: 0, lastSampleMs: performance.now() });
+  const gameInputRef = useRef({ keys: 0, mouseDx: 0, mouseDy: 0 });
   const refresh = useSceneStore(s => s.refresh);
   const isPlaying = useEditorStore(s => s.isPlaying);
   const isPaused = useEditorStore(s => s.isPaused);
@@ -217,37 +218,35 @@ export default function Viewport() {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    // Mouse delta accumulation between frames.
-    let mouseDx = 0;
-    let mouseDy = 0;
-    let keys = 0;
+    // Reset shared input state for this play session.
+    gameInputRef.current = { keys: 0, mouseDx: 0, mouseDy: 0 };
 
     const onMouseMove = (e: MouseEvent) => {
-      mouseDx += e.movementX;
-      mouseDy += e.movementY;
+      gameInputRef.current.mouseDx += e.movementX;
+      gameInputRef.current.mouseDy += e.movementY;
     };
 
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.code === 'KeyW') keys |= (1 << 0);
-      if (e.code === 'KeyS') keys |= (1 << 1);
-      if (e.code === 'KeyA') keys |= (1 << 2);
-      if (e.code === 'KeyD') keys |= (1 << 3);
-      if (e.code === 'Space') { keys |= (1 << 4); e.preventDefault(); }
+      if (e.code === 'KeyW') gameInputRef.current.keys |= (1 << 0);
+      if (e.code === 'KeyS') gameInputRef.current.keys |= (1 << 1);
+      if (e.code === 'KeyA') gameInputRef.current.keys |= (1 << 2);
+      if (e.code === 'KeyD') gameInputRef.current.keys |= (1 << 3);
+      if (e.code === 'Space') { gameInputRef.current.keys |= (1 << 4); e.preventDefault(); }
       if (e.code === 'Escape') { document.exitPointerLock(); }
     };
 
     const onKeyUp = (e: KeyboardEvent) => {
-      if (e.code === 'KeyW') keys &= ~(1 << 0);
-      if (e.code === 'KeyS') keys &= ~(1 << 1);
-      if (e.code === 'KeyA') keys &= ~(1 << 2);
-      if (e.code === 'KeyD') keys &= ~(1 << 3);
-      if (e.code === 'Space') keys &= ~(1 << 4);
+      if (e.code === 'KeyW') gameInputRef.current.keys &= ~(1 << 0);
+      if (e.code === 'KeyS') gameInputRef.current.keys &= ~(1 << 1);
+      if (e.code === 'KeyA') gameInputRef.current.keys &= ~(1 << 2);
+      if (e.code === 'KeyD') gameInputRef.current.keys &= ~(1 << 3);
+      if (e.code === 'Space') gameInputRef.current.keys &= ~(1 << 4);
     };
 
     const onFrame = () => {
-      bridge.setInput(keys, mouseDx, mouseDy);
-      mouseDx = 0;
-      mouseDy = 0;
+      bridge.setInput(gameInputRef.current.keys, gameInputRef.current.mouseDx, gameInputRef.current.mouseDy);
+      gameInputRef.current.mouseDx = 0;
+      gameInputRef.current.mouseDy = 0;
     };
 
     const onClick = () => canvas.requestPointerLock();
@@ -288,47 +287,16 @@ export default function Viewport() {
     if (isPaused) {
       bridge.stopLoop();
     } else {
-      // Restart game loop when unpausing — recreate onFrame closure for input
-      let mouseDx = 0;
-      let mouseDy = 0;
-      let inputKeys = 0;
-
-      const onMouseMove = (e: MouseEvent) => { mouseDx += e.movementX; mouseDy += e.movementY; };
-      const onKeyDown = (e: KeyboardEvent) => {
-        if (e.code === 'KeyW') inputKeys |= (1 << 0);
-        if (e.code === 'KeyS') inputKeys |= (1 << 1);
-        if (e.code === 'KeyA') inputKeys |= (1 << 2);
-        if (e.code === 'KeyD') inputKeys |= (1 << 3);
-        if (e.code === 'Space') { inputKeys |= (1 << 4); e.preventDefault(); }
-        if (e.code === 'Escape') { document.exitPointerLock(); }
-      };
-      const onKeyUp = (e: KeyboardEvent) => {
-        if (e.code === 'KeyW') inputKeys &= ~(1 << 0);
-        if (e.code === 'KeyS') inputKeys &= ~(1 << 1);
-        if (e.code === 'KeyA') inputKeys &= ~(1 << 2);
-        if (e.code === 'KeyD') inputKeys &= ~(1 << 3);
-        if (e.code === 'Space') inputKeys &= ~(1 << 4);
-      };
-
-      document.addEventListener('mousemove', onMouseMove);
-      document.addEventListener('keydown', onKeyDown);
-      document.addEventListener('keyup', onKeyUp);
-
+      // Restart game loop on unpause — listeners stay from the play effect.
       bridge.startGameLoop((_deltaMs) => {
         tickScripts(_deltaMs);
         tickParticles(_deltaMs);
-        bridge.setInput(inputKeys, mouseDx, mouseDy);
-        mouseDx = 0;
-        mouseDy = 0;
+        bridge.setInput(gameInputRef.current.keys, gameInputRef.current.mouseDx, gameInputRef.current.mouseDy);
+        gameInputRef.current.mouseDx = 0;
+        gameInputRef.current.mouseDy = 0;
         refresh();
         trackFps();
       });
-
-      return () => {
-        document.removeEventListener('mousemove', onMouseMove);
-        document.removeEventListener('keydown', onKeyDown);
-        document.removeEventListener('keyup', onKeyUp);
-      };
     }
   }, [isPaused, isPlaying, refresh]);
 

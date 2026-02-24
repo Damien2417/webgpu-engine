@@ -80,7 +80,11 @@ export default function SceneGraph() {
       // Undo: Ctrl+Z
       if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
         e.preventDefault();
-        const snap = useEditorStore.getState().undo();
+        const currentSnap = {
+          engineJson: bridge.saveScene(),
+          editorMeta: useComponentStore.getState().serialize() as Record<number, unknown>,
+        };
+        const snap = useEditorStore.getState().undo(currentSnap);
         if (snap) {
           bridge.loadScene(snap.engineJson);
           useComponentStore.getState().deserialize(snap.editorMeta as Record<number, import('../../engine/types').EntityComponents>);
@@ -90,7 +94,11 @@ export default function SceneGraph() {
       // Redo: Ctrl+Y or Ctrl+Shift+Z
       if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.shiftKey && e.key === 'z'))) {
         e.preventDefault();
-        const snap = useEditorStore.getState().redo();
+        const currentSnap = {
+          engineJson: bridge.saveScene(),
+          editorMeta: useComponentStore.getState().serialize() as Record<number, unknown>,
+        };
+        const snap = useEditorStore.getState().redo(currentSnap);
         if (snap) {
           bridge.loadScene(snap.engineJson);
           useComponentStore.getState().deserialize(snap.editorMeta as Record<number, import('../../engine/types').EntityComponents>);

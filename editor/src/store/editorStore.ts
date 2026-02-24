@@ -3,6 +3,8 @@ import type { EntityId } from '../engine/types';
 
 export type GizmoMode = 'translate' | 'rotate' | 'scale';
 
+type Snapshot = { engineJson: string; editorMeta: Record<number, unknown> };
+
 interface EditorState {
   selectedId:    EntityId | null;
   gizmoMode:     GizmoMode;
@@ -17,11 +19,13 @@ interface EditorState {
   isPaused:   boolean;
   setPaused:  (v: boolean) => void;
 
-  undoStack:  { engineJson: string; editorMeta: Record<number, unknown> }[];
-  redoStack:  { engineJson: string; editorMeta: Record<number, unknown> }[];
-  pushUndo:   (snap: { engineJson: string; editorMeta: Record<number, unknown> }) => void;
-  undo:       () => { engineJson: string; editorMeta: Record<number, unknown> } | null;
-  redo:       () => { engineJson: string; editorMeta: Record<number, unknown> } | null;
+  undoStack:  Snapshot[];
+  redoStack:  Snapshot[];
+  pushUndo:   (snap: Snapshot) => void;
+  /** Pop the undo stack. Pass `currentSnap` to push it onto the redo stack. */
+  undo:       (currentSnap: Snapshot) => Snapshot | null;
+  /** Pop the redo stack. Pass `currentSnap` to push it onto the undo stack. */
+  redo:       (currentSnap: Snapshot) => Snapshot | null;
 }
 
 export const useEditorStore = create<EditorState>((set) => ({
@@ -44,18 +48,24 @@ export const useEditorStore = create<EditorState>((set) => ({
     undoStack: [...s.undoStack.slice(-19), snap],
     redoStack: [],
   })),
-  undo: () => {
+  undo: (currentSnap) => {
     const s = useEditorStore.getState();
     const snap = s.undoStack[s.undoStack.length - 1];
     if (!snap) return null;
-    useEditorStore.setState(prev => ({ undoStack: prev.undoStack.slice(0, -1) }));
+    useEditorStore.setState(prev => ({
+      undoStack: prev.undoStack.slice(0, -1),
+      redoStack: [...prev.redoStack.slice(-19), currentSnap],
+    }));
     return snap;
   },
-  redo: () => {
+  redo: (currentSnap) => {
     const s = useEditorStore.getState();
     const snap = s.redoStack[s.redoStack.length - 1];
     if (!snap) return null;
-    useEditorStore.setState(prev => ({ redoStack: prev.redoStack.slice(0, -1) }));
+    useEditorStore.setState(prev => ({
+      redoStack: prev.redoStack.slice(0, -1),
+      undoStack: [...prev.undoStack.slice(-19), currentSnap],
+    }));
     return snap;
   },
 }));

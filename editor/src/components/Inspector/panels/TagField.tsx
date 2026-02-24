@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { bridge } from '../../../engine/engineBridge';
 import { useSceneStore } from '../../../store/sceneStore';
 import type { EntityId } from '../../../engine/types';
@@ -6,6 +6,8 @@ import type { EntityId } from '../../../engine/types';
 export default function TagField({ entityId }: { entityId: EntityId }) {
   const refresh = useSceneStore(s => s.refresh);
   const [tag, setTag] = useState(() => bridge.getTag(entityId));
+
+  useEffect(() => { setTag(bridge.getTag(entityId)); }, [entityId]);
 
   const commit = (value: string) => {
     bridge.setTag(entityId, value);
