@@ -21,6 +21,8 @@ interface EntityContext {
   rotation:   [number, number, number];
   scale:      [number, number, number];
   components: string[];
+  parentId?:  number;   // absent = entité racine
+  children:   number[];
 }
 
 interface EditorRules {
@@ -42,6 +44,8 @@ function buildEntityContext(id: number): EntityContext {
     rotation: t.rotation,
     scale:    t.scale,
     components: componentNames,
+    parentId:   bridge.getParent(id) ?? undefined,
+    children:   bridge.getChildren(id),
   };
 }
 
