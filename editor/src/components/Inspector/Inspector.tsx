@@ -5,14 +5,18 @@ import ComponentPanels from './ComponentPanels';
 import AddComponentButton from './AddComponentButton';
 
 export default function Inspector() {
-  const selectedId = useEditorStore(s => s.selectedId);
+  const selectedIds  = useEditorStore(s => s.selectedIds);
+  const selectedId   = selectedIds.at(-1) ?? null;
+  const selectedCount = selectedIds.length;
 
   return (
     <div style={{ height: '100%', overflowY: 'auto' }}>
       <div className="panel-header">
         <span className="panel-header-title">Inspector</span>
       </div>
-      {selectedId !== null ? (
+      {selectedCount > 1 ? (
+        <div className="panel-empty">{selectedCount} entities selected</div>
+      ) : selectedId !== null ? (
         <>
           <TransformPanel entityId={selectedId} />
           <ComponentPanels entityId={selectedId} />

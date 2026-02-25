@@ -213,7 +213,7 @@ export default function Viewport() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'f' || e.key === 'F') {
-        const sel = useEditorStore.getState().selectedId;
+        const sel = useEditorStore.getState().selectedIds.at(-1) ?? null;
         if (sel !== null) {
           const t = bridge.getTransform(sel);
           const [px, py, pz] = t.position;

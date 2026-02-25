@@ -15,7 +15,7 @@ export default function AssetBrowser() {
   const addMeshAsset = useCustomMeshStore(s => s.addMesh);
   const fileRef    = useRef<HTMLInputElement>(null);
   const modelRef   = useRef<HTMLInputElement>(null);
-  const selectedId = useEditorStore(s => s.selectedId);
+  const selectedId = useEditorStore(s => s.selectedIds.at(-1) ?? null);
 
   const fileToDataUrl = (file: File): Promise<string> =>
     new Promise((resolve, reject) => {

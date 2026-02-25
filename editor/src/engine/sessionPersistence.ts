@@ -26,7 +26,7 @@ interface PersistedCustomMesh {
 }
 
 interface PersistedEditorUi {
-  selectedId: number | null;
+  selectedId: number | null;  // kept for backwards compat on load
   gizmoMode: GizmoMode;
   isPaused: boolean;
 }
@@ -158,7 +158,7 @@ export function saveSessionToLocalStorage(): void {
         backendId: m.backendId,
       })),
       editorUi: {
-        selectedId: editor.selectedId,
+        selectedId: editor.selectedIds.at(-1) ?? null,
         gizmoMode: editor.gizmoMode,
         isPaused: editor.isPaused,
       },

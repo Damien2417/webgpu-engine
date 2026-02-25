@@ -14,7 +14,8 @@ export default function GizmoOverlay({ width, height }: { width: number; height:
   const dragAxis  = useRef<number | null>(null);
   const dragStart = useRef<[number, number]>([0, 0]);
 
-  const selectedId  = useEditorStore(s => s.selectedId);
+  const selectedIds = useEditorStore(s => s.selectedIds);
+  const selectedId  = selectedIds.at(-1) ?? null;
   const gizmoMode   = useEditorStore(s => s.gizmoMode);
   const isPlaying   = useEditorStore(s => s.isPlaying);
   const select      = useEditorStore(s => s.select);
@@ -24,6 +25,20 @@ export default function GizmoOverlay({ width, height }: { width: number; height:
   const updatePos   = useSceneStore(s => s.updatePosition);
   const updateRot   = useSceneStore(s => s.updateRotation);
   const updateScale = useSceneStore(s => s.updateScale);
+  const refresh     = useSceneStore(s => s.refresh);
+
+  // World-space gizmo origin: centroid of all selected entities (or single entity position)
+  const getGizmoOriginWorld = useCallback((): [number, number, number] => {
+    if (selectedIds.length <= 1) {
+      return entity?.transform.position ?? [0, 0, 0];
+    }
+    const positions = selectedIds.map(id => bridge.getWorldTransform(id).position);
+    return [
+      positions.reduce((sum, p) => sum + p[0], 0) / positions.length,
+      positions.reduce((sum, p) => sum + p[1], 0) / positions.length,
+      positions.reduce((sum, p) => sum + p[2], 0) / positions.length,
+    ];
+  }, [selectedIds, entity]);
 
   const drawCollider = useCallback((ctx: CanvasRenderingContext2D) => {
     if (!entity || !collider || !bridge.isReady) return;
@@ -63,21 +78,21 @@ export default function GizmoOverlay({ width, height }: { width: number; height:
   }, [entity, collider, width, height]);
 
   const getScreenData = useCallback(() => {
-    if (!bridge.isReady) return null;
+    if (!bridge.isReady || selectedId === null) return null;
     const vp = bridge.getViewProj();
-    if (!entity) return { vp, origin: null as null, tips: [] as ([number,number]|null)[] };
-    const origin = project(entity.transform.position, vp, width, height);
+    const originWorld = getGizmoOriginWorld();
+    const origin = project(originWorld, vp, width, height);
     if (!origin) return null;
     const tips = AXIS_DIRS.map(dir => {
-      const tip: [number,number,number] = [
-        entity.transform.position[0] + dir[0],
-        entity.transform.position[1] + dir[1],
-        entity.transform.position[2] + dir[2],
+      const tip: [number, number, number] = [
+        originWorld[0] + dir[0],
+        originWorld[1] + dir[1],
+        originWorld[2] + dir[2],
       ];
       return project(tip, vp, width, height);
     });
     return { vp, origin, tips };
-  }, [entity, width, height]);
+  }, [selectedId, getGizmoOriginWorld, width, height]);
 
   // Draw
   useEffect(() => {
@@ -93,7 +108,7 @@ export default function GizmoOverlay({ width, height }: { width: number; height:
     if (gizmoMode === 'translate') drawTranslateGizmo(ctx, origin, tips);
     else if (gizmoMode === 'rotate') drawRotateGizmo(ctx, origin);
     else if (gizmoMode === 'scale')  drawScaleGizmo(ctx, origin, tips);
-  }, [entity, gizmoMode, isPlaying, width, height, getScreenData, drawCollider]);
+  }, [entity, selectedIds, gizmoMode, isPlaying, width, height, getScreenData, drawCollider]);
 
   // Interaction
   useEffect(() => {
@@ -140,13 +155,17 @@ export default function GizmoOverlay({ width, height }: { width: number; height:
       const delta = (Math.abs(dx) > Math.abs(dy) ? dx : -dy) * 0.02;
 
       if (gizmoMode === 'translate') {
-        const live = bridge.getTransform(entity.id);
-        const [px, py, pz] = live.position;
-        updatePos(entity.id,
-          px + (axis === 0 ? delta : 0),
-          py + (axis === 1 ? delta : 0),
-          pz + (axis === 2 ? delta : 0),
-        );
+        // Apply delta to all selected entities
+        for (const selId of selectedIds) {
+          const live = bridge.getTransform(selId);
+          const [px, py, pz] = live.position;
+          bridge.setPosition(selId,
+            px + (axis === 0 ? delta : 0),
+            py + (axis === 1 ? delta : 0),
+            pz + (axis === 2 ? delta : 0),
+          );
+        }
+        refresh();
       } else if (gizmoMode === 'rotate') {
         const live = bridge.getTransform(entity.id);
         const [rx, ry, rz] = live.rotation;
@@ -178,7 +197,7 @@ export default function GizmoOverlay({ width, height }: { width: number; height:
       window.removeEventListener('mousemove', onMove);
       window.removeEventListener('mouseup', onUp);
     };
-  }, [entity, entities, gizmoMode, isPlaying, getScreenData, select, updatePos, updateRot, updateScale, width, height]);
+  }, [entity, entities, selectedIds, gizmoMode, isPlaying, getScreenData, select, updatePos, updateRot, updateScale, refresh, width, height]);
 
   return (
     <canvas
