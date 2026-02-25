@@ -858,6 +858,71 @@ impl World {
         }
     }
 
+    // ── Hiérarchie parent-enfant ─────────────────────────────────────────────
+
+    /// Définit parent_id comme parent de child_id.
+    /// Convertit le world transform actuel de child en local relatif à parent.
+    #[wasm_bindgen]
+    pub fn set_parent(&mut self, child_id: usize, parent_id: usize) {
+        let child_world  = self.compute_world_matrix(child_id);
+        let parent_world = self.compute_world_matrix(parent_id);
+        let local_mat    = parent_world.inverse() * child_world;
+
+        let (scale, rotation, translation) = local_mat.to_scale_rotation_translation();
+        if let Some(t) = self.transforms.get_mut(child_id) {
+            t.position = translation;
+            t.rotation = Self::quat_to_euler_deg(rotation);
+            t.scale    = scale;
+        }
+        self.parents.insert(child_id, Parent { parent_id });
+    }
+
+    /// Retire le parent de child_id.
+    /// Convertit le local transform en world transform.
+    #[wasm_bindgen]
+    pub fn remove_parent(&mut self, child_id: usize) {
+        let world_mat = self.compute_world_matrix(child_id);
+        let (scale, rotation, translation) = world_mat.to_scale_rotation_translation();
+        if let Some(t) = self.transforms.get_mut(child_id) {
+            t.position = translation;
+            t.rotation = Self::quat_to_euler_deg(rotation);
+            t.scale    = scale;
+        }
+        self.parents.remove(child_id);
+    }
+
+    /// Retourne l'ID du parent, ou u32::MAX si pas de parent.
+    #[wasm_bindgen]
+    pub fn get_parent(&self, child_id: usize) -> u32 {
+        self.parents.get(child_id)
+            .map(|p| p.parent_id as u32)
+            .unwrap_or(u32::MAX)
+    }
+
+    /// Retourne les IDs des enfants directs de parent_id.
+    #[wasm_bindgen]
+    pub fn get_children(&self, parent_id: usize) -> js_sys::Uint32Array {
+        let children: Vec<u32> = self.parents.iter()
+            .filter(|(_, p)| p.parent_id == parent_id)
+            .map(|(id, _)| id as u32)
+            .collect();
+        js_sys::Uint32Array::from(children.as_slice())
+    }
+
+    /// Retourne [px, py, pz, rx, ry, rz, sx, sy, sz] en espace monde.
+    #[wasm_bindgen]
+    pub fn get_world_transform_array(&self, id: usize) -> js_sys::Float32Array {
+        let mat = self.compute_world_matrix(id);
+        let (scale, rotation, translation) = mat.to_scale_rotation_translation();
+        let euler = Self::quat_to_euler_deg(rotation);
+        let data = [
+            translation.x, translation.y, translation.z,
+            euler.x, euler.y, euler.z,
+            scale.x, scale.y, scale.z,
+        ];
+        js_sys::Float32Array::from(data.as_slice())
+    }
+
     /// Retourne la matrice view*proj [16 f32, column-major] pour les gizmos.
     pub fn get_view_proj(&self) -> js_sys::Float32Array {
         let aspect = self.config.width as f32 / self.config.height as f32;
