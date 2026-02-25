@@ -22,6 +22,7 @@ const schemas: Record<string, z.ZodTypeAny> = {
     name:     z.string(),
     position: vec3.optional(),
     scale:    vec3.optional(),
+    withMesh: z.boolean().optional().default(true),
   }),
   delete_entity: z.object({
     entityId: z.number().int().nonnegative(),
@@ -45,6 +46,13 @@ const schemas: Record<string, z.ZodTypeAny> = {
     entityId:      z.number().int().nonnegative(),
     componentType: z.enum(['transform', 'meshRenderer', 'rigidbody', 'collider', 'pointLight', 'material']),
     patch:         z.record(z.string(), z.unknown()),
+  }),
+  set_parent: z.object({
+    childId:  z.number().int().nonnegative(),
+    parentId: z.number().int().nonnegative(),
+  }),
+  remove_parent: z.object({
+    childId: z.number().int().nonnegative(),
   }),
 };
 
@@ -102,17 +110,18 @@ const handlers: Record<string, Handler> = {
   },
 
   create_entity: (args) => {
-    const { name, position, scale } = args as {
+    const { name, position, scale, withMesh = true } = args as {
       name: string;
       position?: [number, number, number];
       scale?: [number, number, number];
+      withMesh?: boolean;
     };
-    const sceneStore = useSceneStore.getState();
-    const id = sceneStore.addEntity(name);
+    const id = bridge.createEntity(name);
+    if (withMesh) bridge.addMeshRenderer(id);
     if (position) bridge.setPosition(id, position[0], position[1], position[2]);
     if (scale)    bridge.setScale(id, scale[0], scale[1], scale[2]);
-    sceneStore.refresh();
-    return { entityId: id, name };
+    useSceneStore.getState().refresh();
+    return { entityId: id, name, withMesh };
   },
 
   delete_entity: (args) => {
@@ -187,6 +196,25 @@ const handlers: Record<string, Handler> = {
       }
     }
     return { entityId, componentType };
+  },
+
+  set_parent: (args) => {
+    const { childId, parentId } = args as { childId: number; parentId: number };
+    const ids = bridge.getEntityIds();
+    if (!ids.includes(childId))  throw new Error(`Entity ${childId} not found`);
+    if (!ids.includes(parentId)) throw new Error(`Entity ${parentId} not found`);
+    bridge.setParent(childId, parentId);
+    useSceneStore.getState().refresh();
+    return { childId, parentId };
+  },
+
+  remove_parent: (args) => {
+    const { childId } = args as { childId: number };
+    const ids = bridge.getEntityIds();
+    if (!ids.includes(childId)) throw new Error(`Entity ${childId} not found`);
+    bridge.removeParent(childId);
+    useSceneStore.getState().refresh();
+    return { childId, detached: true };
   },
 
   update_component: (args) => {
