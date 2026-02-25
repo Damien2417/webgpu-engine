@@ -20,8 +20,17 @@ const MODES: { key: GizmoMode; label: string; shortcut: string }[] = [
 ];
 
 export default function Toolbar() {
-  const { gizmoMode, setGizmoMode, isPlaying, setPlaying, setSnapshot, sceneSnapshot, select, isPaused, setPaused } = useEditorStore();
-  const refresh = useSceneStore(s => s.refresh);
+  const { gizmoMode, setGizmoMode, isPlaying, setPlaying, setSnapshot, sceneSnapshot, select, isPaused, setPaused, aiPanelOpen, setAiPanel, selectedIds } = useEditorStore();
+  const refresh        = useSceneStore(s => s.refresh);
+  const groupSelected  = useSceneStore(s => s.groupSelected);
+  const ungroupSelected = useSceneStore(s => s.ungroupSelected);
+
+  const snapBefore = () => {
+    useEditorStore.getState().pushUndo({
+      engineJson: bridge.saveScene(),
+      editorMeta: useComponentStore.getState().serialize() as Record<number, unknown>,
+    });
+  };
 
   const play = () => {
     // Ensure editor metadata components are materialized in engine state before snapshot/play.
@@ -68,8 +77,35 @@ export default function Toolbar() {
           </button>
         ))}
       </div>
+      <div className="toolbar-divider" />
+      <div className="toolbar-group">
+        <button
+          style={btn(false)}
+          onClick={() => { snapBefore(); groupSelected(); }}
+          disabled={isPlaying || selectedIds.length < 2}
+          title="Group selected (Ctrl+G)"
+        >
+          Group
+        </button>
+        <button
+          style={btn(false)}
+          onClick={() => { snapBefore(); ungroupSelected(); }}
+          disabled={isPlaying || selectedIds.length !== 1}
+          title="Ungroup (Ctrl+Shift+G)"
+        >
+          Ungroup
+        </button>
+      </div>
       <div className="menu-spacer" />
       <div className="toolbar-group">
+        <button
+          style={btn(aiPanelOpen)}
+          onClick={() => setAiPanel(!aiPanelOpen)}
+          title="Toggle AI Chat panel"
+        >
+          ✦ AI
+        </button>
+        <div className="toolbar-divider" />
         {isPlaying
           ? <button style={btn(false)} onClick={stop}>Stop</button>
           : <button style={{ ...btn(false), color: '#4caf50' }} onClick={play}>Play</button>

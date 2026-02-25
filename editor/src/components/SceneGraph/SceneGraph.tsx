@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useSceneStore } from '../../store/sceneStore';
 import { useEditorStore } from '../../store/editorStore';
 import { useComponentStore } from '../../store/componentStore';
@@ -17,8 +17,10 @@ export default function SceneGraph() {
   const entities        = useSceneStore(s => s.entities);
   const addEntity       = useSceneStore(s => s.addEntity);
   const removeEntity    = useSceneStore(s => s.removeEntity);
-  const duplicateEntity = useSceneStore(s => s.duplicateEntity);
-  const refresh         = useSceneStore(s => s.refresh);
+  const duplicateEntity  = useSceneStore(s => s.duplicateEntity);
+  const groupSelected    = useSceneStore(s => s.groupSelected);
+  const ungroupSelected  = useSceneStore(s => s.ungroupSelected);
+  const refresh          = useSceneStore(s => s.refresh);
   const selectedIds     = useEditorStore(s => s.selectedIds);
   const select          = useEditorStore(s => s.select);
   const toggleSelect    = useEditorStore(s => s.toggleSelect);
@@ -175,6 +177,16 @@ export default function SceneGraph() {
         const newId = duplicateEntity(selectedId);
         if (newId !== null) select(newId);
       }
+      // Ctrl+G — grouper
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && (e.key === 'g' || e.key === 'G')) {
+        e.preventDefault();
+        if (selectedIds.length >= 2) { snapBefore(); groupSelected(); }
+      }
+      // Ctrl+Shift+G — dégrouper
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'g' || e.key === 'G')) {
+        e.preventDefault();
+        snapBefore(); ungroupSelected();
+      }
       // Ctrl+A — select all
       if ((e.ctrlKey || e.metaKey) && (e.key === 'a' || e.key === 'A')) {
         e.preventDefault();
@@ -219,7 +231,7 @@ export default function SceneGraph() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [selectedId, selectedIds, entities, select, clearSelection, selectAll, removeEntity, duplicateEntity, setGizmoMode, refresh]);
+  }, [selectedId, selectedIds, entities, select, clearSelection, selectAll, removeEntity, duplicateEntity, groupSelected, ungroupSelected, setGizmoMode, refresh]);
 
   return (
     <div style={s.root}>
