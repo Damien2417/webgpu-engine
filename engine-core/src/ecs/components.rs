@@ -72,6 +72,12 @@ pub struct PointLight {
     pub intensity: f32,
 }
 
+// ── Parent ────────────────────────────────────────────────────────────────
+
+pub struct Parent {
+    pub parent_id: usize,
+}
+
 // ── Camera ────────────────────────────────────────────────────────────────
 
 pub struct CameraComponent {

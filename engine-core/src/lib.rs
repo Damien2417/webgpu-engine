@@ -6,7 +6,7 @@ mod mesh;
 mod scene;
 
 use camera::Camera;
-use ecs::{CameraComponent, Collider, Material, MeshRenderer, MeshType, PointLight, RigidBody, SparseSet, Transform};
+use ecs::{CameraComponent, Collider, Material, MeshRenderer, MeshType, Parent, PointLight, RigidBody, SparseSet, Transform};
 use scene::{SceneCameraComponent, SceneData, SceneDirectionalLight, SceneMaterial, ScenePointLight,
             SceneRigidBody, SceneTransform};
 use mesh::{Vertex, CUBE_INDICES, CUBE_VERTICES, PLANE_INDICES, PLANE_VERTICES};
@@ -153,6 +153,9 @@ pub struct World {
     shadow_bind_group:        wgpu::BindGroup,
     shadow_pipeline:          wgpu::RenderPipeline,
     shadow_entity_layout:     wgpu::BindGroupLayout,
+
+    // Hiérarchie
+    parents: SparseSet<Parent>,
 
     // Scènes
     persistent_entities: HashSet<usize>,
@@ -752,6 +755,7 @@ impl World {
             shadow_bind_group,
             shadow_pipeline,
             shadow_entity_layout,
+            parents: SparseSet::new(),
             persistent_entities: HashSet::new(),
             texture_registry:    HashMap::new(),
             entity_names:        HashMap::new(),
