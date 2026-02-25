@@ -2,17 +2,22 @@ import { create } from 'zustand';
 import { bridge } from '../engine/engineBridge';
 import type { EntityId, EntityData } from '../engine/types';
 import { useComponentStore } from './componentStore';
+import { useEditorStore } from './editorStore';
 
 interface SceneState {
   entities: EntityData[];
 
-  refresh:         () => void;
-  addEntity:       (name?: string) => EntityId;
-  removeEntity:    (id: EntityId) => void;
-  duplicateEntity: (id: EntityId) => EntityId | null;
-  updatePosition:  (id: EntityId, x: number, y: number, z: number) => void;
-  updateRotation:  (id: EntityId, x: number, y: number, z: number) => void;
-  updateScale:     (id: EntityId, x: number, y: number, z: number) => void;
+  refresh:          () => void;
+  addEntity:        (name?: string) => EntityId;
+  removeEntity:     (id: EntityId) => void;
+  duplicateEntity:  (id: EntityId) => EntityId | null;
+  updatePosition:   (id: EntityId, x: number, y: number, z: number) => void;
+  updateRotation:   (id: EntityId, x: number, y: number, z: number) => void;
+  updateScale:      (id: EntityId, x: number, y: number, z: number) => void;
+  /** Groupe les entités sélectionnées. Retourne l'ID du groupe ou null. */
+  groupSelected:    () => EntityId | null;
+  /** Dégroupe l'entité sélectionnée (libère ses enfants). */
+  ungroupSelected:  () => void;
 }
 
 export const useSceneStore = create<SceneState>((set, get) => ({
@@ -73,5 +78,52 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   updateScale: (id, x, y, z) => {
     bridge.setScale(id, x, y, z);
     get().refresh();
+  },
+
+  groupSelected: () => {
+    const selectedIds = useEditorStore.getState().selectedIds;
+    if (selectedIds.length < 2) return null;
+
+    // Centroïde des world positions
+    const positions = selectedIds.map(id => bridge.getWorldTransform(id).position);
+    const cx = positions.reduce((s, p) => s + p[0], 0) / positions.length;
+    const cy = positions.reduce((s, p) => s + p[1], 0) / positions.length;
+    const cz = positions.reduce((s, p) => s + p[2], 0) / positions.length;
+
+    // Créer l'entité groupe (sans MeshRenderer)
+    const groupId = bridge.createEntity('Group');
+    bridge.setPosition(groupId, cx, cy, cz);
+
+    // Reparenter chaque entité sélectionnée
+    for (const id of selectedIds) {
+      bridge.setParent(id, groupId);
+    }
+
+    get().refresh();
+    useEditorStore.getState().select(groupId);
+    return groupId;
+  },
+
+  ungroupSelected: () => {
+    const selectedId = useEditorStore.getState().selectedIds.at(-1);
+    if (selectedId === undefined) return;
+
+    const entity = get().entities.find(e => e.id === selectedId);
+    if (!entity) return;
+
+    // Détacher tous les enfants
+    const childIds = [...entity.children];
+    for (const childId of childIds) {
+      bridge.removeParent(childId);
+    }
+
+    // Supprimer le groupe s'il n'a pas de mesh
+    if (!entity.hasMesh || useComponentStore.getState().getComponents(selectedId).meshType === undefined) {
+      bridge.removeEntity(selectedId);
+      useComponentStore.getState().removeEntity(selectedId);
+    }
+
+    get().refresh();
+    useEditorStore.getState().clearSelection();
   },
 }));
