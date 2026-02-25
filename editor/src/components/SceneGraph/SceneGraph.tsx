@@ -3,40 +3,39 @@ import { useSceneStore } from '../../store/sceneStore';
 import { useEditorStore } from '../../store/editorStore';
 import { useComponentStore } from '../../store/componentStore';
 import { bridge } from '../../engine/engineBridge';
+import type { EntityData } from '../../engine/types';
 
 const s: Record<string, React.CSSProperties> = {
   root:   { height: '100%', display: 'flex', flexDirection: 'column' },
   header: { padding: '5px 8px', background: 'var(--bg-header)', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontWeight: 600, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--text-dim)' },
   list:   { flex: 1, overflow: 'auto' },
-  item:   { padding: '4px 8px 4px 16px', cursor: 'pointer', userSelect: 'none', display: 'flex', alignItems: 'center', gap: 6, fontSize: 12 },
   addBtn: { background: 'none', border: '1px solid var(--border)', color: 'var(--accent)', cursor: 'pointer', borderRadius: 3, padding: '1px 7px', fontSize: 11 },
   search: { width: '100%', background: 'var(--bg-hover)', border: '1px solid var(--border)', borderRadius: 3, color: 'var(--text)', padding: '3px 6px', fontSize: 11, boxSizing: 'border-box' as const },
 };
 
 export default function SceneGraph() {
-  const entities         = useSceneStore(s => s.entities);
-  const addEntity        = useSceneStore(s => s.addEntity);
-  const removeEntity     = useSceneStore(s => s.removeEntity);
-  const duplicateEntity  = useSceneStore(s => s.duplicateEntity);
-  const refresh          = useSceneStore(s => s.refresh);
-  const selectedId       = useEditorStore(s => s.selectedId);
-  const select           = useEditorStore(s => s.select);
-  const setGizmoMode     = useEditorStore(s => s.setGizmoMode);
+  const entities        = useSceneStore(s => s.entities);
+  const addEntity       = useSceneStore(s => s.addEntity);
+  const removeEntity    = useSceneStore(s => s.removeEntity);
+  const duplicateEntity = useSceneStore(s => s.duplicateEntity);
+  const refresh         = useSceneStore(s => s.refresh);
+  const selectedIds     = useEditorStore(s => s.selectedIds);
+  const select          = useEditorStore(s => s.select);
+  const toggleSelect    = useEditorStore(s => s.toggleSelect);
+  const selectAll       = useEditorStore(s => s.selectAll);
+  const clearSelection  = useEditorStore(s => s.clearSelection);
+  const setGizmoMode    = useEditorStore(s => s.setGizmoMode);
+  const selectedId      = selectedIds.at(-1) ?? null;
 
-  const [search, setSearch]         = useState('');
-  const [renamingId, setRenamingId] = useState<number | null>(null);
-  const [renameVal, setRenameVal]   = useState('');
+  const [search, setSearch]           = useState('');
+  const [expanded, setExpanded]       = useState<Record<number, boolean>>({});
+  const [renamingId, setRenamingId]   = useState<number | null>(null);
+  const [renameVal, setRenameVal]     = useState('');
+  const [dragOver, setDragOver]       = useState<number | 'root' | null>(null);
   const renameRef = useRef<HTMLInputElement>(null);
 
-  const filtered = search
-    ? entities.filter(e => e.name.toLowerCase().includes(search.toLowerCase()))
-    : entities;
-
-  const startRename = (id: number, name: string) => {
-    setRenamingId(id);
-    setRenameVal(name);
-    setTimeout(() => renameRef.current?.select(), 10);
-  };
+  const toggleExpand = (id: number) =>
+    setExpanded(prev => ({ ...prev, [id]: !prev[id] }));
 
   const commitRename = () => {
     if (renamingId !== null && renameVal.trim()) {
@@ -54,24 +53,136 @@ export default function SceneGraph() {
     });
   };
 
+  // Recursive node render
+  const renderNode = (e: EntityData, depth: number): React.ReactNode => {
+    const isSelected   = selectedIds.includes(e.id);
+    const hasChildren  = e.children.length > 0;
+    const isExpanded   = expanded[e.id] ?? true;
+    const isDragTarget = dragOver === e.id;
+
+    return (
+      <React.Fragment key={e.id}>
+        <div
+          style={{
+            padding: `3px 8px 3px ${16 + depth * 14}px`,
+            cursor: 'pointer',
+            userSelect: 'none',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 5,
+            fontSize: 12,
+            background: isSelected ? 'var(--bg-select)'
+              : isDragTarget ? 'var(--bg-hover)'
+              : 'transparent',
+            color: isSelected ? '#fff' : 'var(--text)',
+            borderTop: isDragTarget ? '1px solid var(--accent)' : 'none',
+          }}
+          onClick={(ev) => {
+            if (ev.ctrlKey || ev.metaKey) toggleSelect(e.id);
+            else select(e.id);
+          }}
+          onDoubleClick={() => {
+            setRenamingId(e.id);
+            setRenameVal(e.name);
+            setTimeout(() => renameRef.current?.select(), 10);
+          }}
+          onContextMenu={(ev) => {
+            ev.preventDefault();
+            snapBefore();
+            removeEntity(e.id);
+            if (isSelected) clearSelection();
+          }}
+          draggable
+          onDragStart={(ev) => { ev.dataTransfer.setData('entityId', String(e.id)); }}
+          onDragOver={(ev) => { ev.preventDefault(); setDragOver(e.id); }}
+          onDragLeave={() => setDragOver(null)}
+          onDrop={(ev) => {
+            ev.preventDefault();
+            setDragOver(null);
+            const draggedId = Number(ev.dataTransfer.getData('entityId'));
+            if (draggedId !== e.id) {
+              snapBefore();
+              bridge.setParent(draggedId, e.id);
+              refresh();
+            }
+          }}
+          title="Double-click: rename | Right-click: delete | Ctrl+D: duplicate | Drag: reparent"
+        >
+          {/* Chevron expand/collapse */}
+          <span
+            style={{ width: 12, color: 'var(--text-dim)', fontSize: 10, flexShrink: 0, cursor: hasChildren ? 'pointer' : 'default' }}
+            onClick={(ev) => {
+              if (hasChildren) {
+                ev.stopPropagation();
+                toggleExpand(e.id);
+              }
+            }}
+          >
+            {hasChildren ? (isExpanded ? '▾' : '▸') : '·'}
+          </span>
+          {/* Icon: group (no mesh) or entity */}
+          <span style={{ color: 'var(--text-dim)', fontSize: 10 }}>
+            {hasChildren && !e.hasMesh ? '◻' : '◈'}
+          </span>
+          {/* Name / rename input */}
+          {renamingId === e.id ? (
+            <input
+              ref={renameRef}
+              style={{ background: 'var(--bg-hover)', border: '1px solid var(--accent)', color: '#fff', borderRadius: 2, padding: '0 4px', fontSize: 12, width: '80%' }}
+              value={renameVal}
+              onChange={ev => setRenameVal(ev.target.value)}
+              onBlur={commitRename}
+              onKeyDown={ev => {
+                if (ev.key === 'Enter') commitRename();
+                if (ev.key === 'Escape') setRenamingId(null);
+              }}
+              onClick={ev => ev.stopPropagation()}
+            />
+          ) : e.name}
+        </div>
+        {/* Children */}
+        {hasChildren && isExpanded && e.children.map(childId => {
+          const child = entities.find(x => x.id === childId);
+          return child ? renderNode(child, depth + 1) : null;
+        })}
+      </React.Fragment>
+    );
+  };
+
+  // Root entities: no parent (or when searching, show all matches flat)
+  const roots = search
+    ? entities.filter(e => e.name.toLowerCase().includes(search.toLowerCase()))
+    : entities.filter(e => e.parentId === undefined);
+
   // Global keyboard shortcuts
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const tag = (document.activeElement as HTMLElement)?.tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+
       if (e.key === 'w' || e.key === 'W') setGizmoMode('translate');
       if (e.key === 'e' || e.key === 'E') setGizmoMode('rotate');
       if (e.key === 'r' || e.key === 'R') setGizmoMode('scale');
+
       if ((e.key === 'Delete' || e.key === 'Backspace') && selectedId !== null) {
         snapBefore();
         removeEntity(selectedId);
-        select(null);
+        clearSelection();
       }
       if (e.ctrlKey && (e.key === 'd' || e.key === 'D') && selectedId !== null) {
         e.preventDefault();
         snapBefore();
         const newId = duplicateEntity(selectedId);
         if (newId !== null) select(newId);
+      }
+      // Ctrl+A — select all
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'a' || e.key === 'A')) {
+        e.preventDefault();
+        selectAll(entities.map(e => e.id));
+      }
+      // Escape — deselect
+      if (e.key === 'Escape') {
+        clearSelection();
       }
       if (e.ctrlKey && (e.key === 's' || e.key === 'S')) {
         e.preventDefault();
@@ -108,7 +219,7 @@ export default function SceneGraph() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [selectedId, select, removeEntity, duplicateEntity, setGizmoMode, refresh]);
+  }, [selectedId, selectedIds, entities, select, clearSelection, selectAll, removeEntity, duplicateEntity, setGizmoMode, refresh]);
 
   return (
     <div style={s.root}>
@@ -116,7 +227,26 @@ export default function SceneGraph() {
         <span>Scene</span>
         <button style={s.addBtn} onClick={() => { const id = addEntity(); select(id); }} title="Add Entity">+</button>
       </div>
-      <div style={{ padding: '4px 8px', borderBottom: '1px solid var(--border)' }}>
+      {/* Root drop zone */}
+      <div
+        style={{
+          padding: '4px 8px',
+          borderBottom: '1px solid var(--border)',
+          background: dragOver === 'root' ? 'var(--bg-hover)' : 'transparent',
+        }}
+        onDragOver={(ev) => { ev.preventDefault(); setDragOver('root'); }}
+        onDragLeave={() => setDragOver(null)}
+        onDrop={(ev) => {
+          ev.preventDefault();
+          setDragOver(null);
+          const draggedId = Number(ev.dataTransfer.getData('entityId'));
+          if (bridge.getParent(draggedId) !== null) {
+            snapBefore();
+            bridge.removeParent(draggedId);
+            refresh();
+          }
+        }}
+      >
         <input
           style={s.search}
           placeholder="Search..."
@@ -125,43 +255,12 @@ export default function SceneGraph() {
         />
       </div>
       <div style={s.list}>
-        {filtered.length === 0 && (
+        {roots.length === 0 && (
           <div style={{ padding: '12px 8px', color: 'var(--text-dim)', fontSize: 11 }}>
             {search ? 'No results' : 'Empty scene — click + to add'}
           </div>
         )}
-        {filtered.map(e => (
-          <div
-            key={e.id}
-            style={{
-              ...s.item,
-              background: e.id === selectedId ? 'var(--bg-select)' : 'transparent',
-              color:      e.id === selectedId ? '#fff' : 'var(--text)',
-            }}
-            onClick={() => select(e.id)}
-            onDoubleClick={() => startRename(e.id, e.name)}
-            onContextMenu={(ev) => {
-              ev.preventDefault();
-              snapBefore();
-              removeEntity(e.id);
-              if (selectedId === e.id) select(null);
-            }}
-            title="Double-click to rename | Right-click to delete | Ctrl+D to duplicate"
-          >
-            <span style={{ color: 'var(--text-dim)', fontSize: 10 }}>▸</span>
-            {renamingId === e.id ? (
-              <input
-                ref={renameRef}
-                style={{ background: 'var(--bg-hover)', border: '1px solid var(--accent)', color: '#fff', borderRadius: 2, padding: '0 4px', fontSize: 12, width: '80%' }}
-                value={renameVal}
-                onChange={ev => setRenameVal(ev.target.value)}
-                onBlur={commitRename}
-                onKeyDown={ev => { if (ev.key === 'Enter') commitRename(); if (ev.key === 'Escape') setRenamingId(null); }}
-                onClick={ev => ev.stopPropagation()}
-              />
-            ) : e.name}
-          </div>
-        ))}
+        {roots.map(e => renderNode(e, 0))}
       </div>
     </div>
   );
