@@ -6,18 +6,29 @@ export type GizmoMode = 'translate' | 'rotate' | 'scale';
 type Snapshot = { engineJson: string; editorMeta: Record<number, unknown> };
 
 interface EditorState {
-  selectedId:    EntityId | null;
-  gizmoMode:     GizmoMode;
-  isPlaying:     boolean;
-  sceneSnapshot: string | null;
+  selectedIds:    EntityId[];
+  gizmoMode:      GizmoMode;
+  isPlaying:      boolean;
+  sceneSnapshot:  string | null;
 
-  select:       (id: EntityId | null) => void;
+  /** Sélection unique — efface les autres */
+  select:         (id: EntityId | null) => void;
+  /** Ctrl+Clic — ajoute ou retire */
+  toggleSelect:   (id: EntityId) => void;
+  /** Ctrl+A — tout sélectionner */
+  selectAll:      (allIds: EntityId[]) => void;
+  /** Escape / clic fond vide */
+  clearSelection: () => void;
+
   setGizmoMode: (mode: GizmoMode) => void;
   setPlaying:   (v: boolean) => void;
   setSnapshot:  (json: string | null) => void;
 
-  isPaused:   boolean;
-  setPaused:  (v: boolean) => void;
+  isPaused:    boolean;
+  setPaused:   (v: boolean) => void;
+
+  aiPanelOpen: boolean;
+  setAiPanel:  (v: boolean) => void;
 
   undoStack:  Snapshot[];
   redoStack:  Snapshot[];
@@ -29,18 +40,29 @@ interface EditorState {
 }
 
 export const useEditorStore = create<EditorState>((set, get) => ({
-  selectedId:    null,
+  selectedIds:   [],
   gizmoMode:     'translate',
   isPlaying:     false,
   sceneSnapshot: null,
 
-  select:       (id)   => set({ selectedId: id }),
+  select:         (id)     => set({ selectedIds: id !== null ? [id] : [] }),
+  toggleSelect:   (id)     => set(s => ({
+    selectedIds: s.selectedIds.includes(id)
+      ? s.selectedIds.filter(x => x !== id)
+      : [...s.selectedIds, id],
+  })),
+  selectAll:      (allIds) => set({ selectedIds: allIds }),
+  clearSelection: ()       => set({ selectedIds: [] }),
+
   setGizmoMode: (mode) => set({ gizmoMode: mode }),
   setPlaying:   (v)    => set({ isPlaying: v }),
   setSnapshot:  (json) => set({ sceneSnapshot: json }),
 
-  isPaused:  false,
-  setPaused: (v) => set({ isPaused: v }),
+  isPaused:    false,
+  setPaused:   (v) => set({ isPaused: v }),
+
+  aiPanelOpen: false,
+  setAiPanel:  (v) => set({ aiPanelOpen: v }),
 
   undoStack: [],
   redoStack: [],
