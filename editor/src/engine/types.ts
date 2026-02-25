@@ -11,6 +11,8 @@ export interface EntityData {
   name:      string;
   transform: Transform;
   hasMesh:   boolean;
+  parentId?: EntityId;    // undefined = entité racine
+  children:  EntityId[];  // IDs des enfants directs
 }
 
 export interface MaterialData {

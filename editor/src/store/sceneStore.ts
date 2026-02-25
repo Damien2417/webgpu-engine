@@ -25,6 +25,8 @@ export const useSceneStore = create<SceneState>((set, get) => ({
       name:      bridge.getEntityName(id),
       transform: bridge.getTransform(id),
       hasMesh:   true,
+      parentId:  bridge.getParent(id) ?? undefined,
+      children:  bridge.getChildren(id),
     }));
     set({ entities });
   },

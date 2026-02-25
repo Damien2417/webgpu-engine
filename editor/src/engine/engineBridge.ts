@@ -43,6 +43,36 @@ class EngineBridge {
     this.world?.add_mesh_renderer(id);
   }
 
+  // ── Hiérarchie parent-enfant ────────────────────────────────────────────────
+
+  setParent(childId: EntityId, parentId: EntityId): void {
+    this.world?.set_parent(childId, parentId);
+  }
+
+  removeParent(childId: EntityId): void {
+    this.world?.remove_parent(childId);
+  }
+
+  getParent(childId: EntityId): EntityId | null {
+    const p = this.world?.get_parent(childId) ?? 0xFFFFFFFF;
+    return p === 0xFFFFFFFF ? null : p;
+  }
+
+  getChildren(parentId: EntityId): EntityId[] {
+    if (!this.world) return [];
+    return Array.from(this.world.get_children(parentId));
+  }
+
+  getWorldTransform(id: EntityId): Transform {
+    if (!this.world) return { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] };
+    const a = this.world.get_world_transform_array(id);
+    return {
+      position: [a[0], a[1], a[2]],
+      rotation: [a[3], a[4], a[5]],
+      scale:    [a[6], a[7], a[8]],
+    };
+  }
+
   // ── Transform ───────────────────────────────────────────────────────────────
 
   getTransform(id: EntityId): Transform {
