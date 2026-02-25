@@ -1757,6 +1757,13 @@ impl World {
         // Créer les entités
         let mut new_ids: Vec<u32> = Vec::new();
 
+        // Collecter les relations parent AVANT la boucle consommatrice
+        let parent_requests: Vec<(usize, usize)> = scene.entities
+            .iter()
+            .enumerate()
+            .filter_map(|(i, e)| e.parent_index.map(|pidx| (i, pidx)))
+            .collect();
+
         for entity_data in scene.entities {
             let id = self.create_entity();
             new_ids.push(id as u32);
@@ -1832,7 +1839,22 @@ impl World {
             }
         }
 
+        // Restaurer les relations parent-enfant
+        for (child_idx, parent_idx) in parent_requests {
+            if let (Some(&child_id), Some(&parent_id)) =
+                (new_ids.get(child_idx), new_ids.get(parent_idx))
+            {
+                self.set_parent_raw(child_id as usize, parent_id as usize);
+            }
+        }
+
         js_sys::Uint32Array::from(new_ids.as_slice())
+    }
+
+    /// Interne: définit le parent SANS convertir les transforms.
+    /// Utilisé par load_scene — les transforms locaux sont déjà dans le JSON.
+    fn set_parent_raw(&mut self, child_id: usize, parent_id: usize) {
+        self.parents.insert(child_id, Parent { parent_id });
     }
 
     /// Sérialise la scène courante (toutes les entités) en JSON string.
@@ -1865,6 +1887,13 @@ impl World {
         let mut sorted_ids: Vec<usize> = all_ids.into_iter().collect();
         sorted_ids.sort();
 
+        // Map entity_id → index dans sorted_ids (pour sérialiser les relations parent)
+        let id_to_index: HashMap<usize, usize> = sorted_ids
+            .iter()
+            .enumerate()
+            .map(|(i, &id)| (id, i))
+            .collect();
+
         for id in sorted_ids {
             let transform = self.transforms.get(id).map(|t| SceneTransform {
                 position: t.position.to_array(),
@@ -1888,6 +1917,10 @@ impl World {
                 intensity: pl.intensity,
             });
 
+            let parent_index = self.parents.get(id)
+                .and_then(|p| id_to_index.get(&p.parent_id))
+                .copied();
+
             entities.push(SceneEntityData {
                 transform, mesh_renderer, material, rigid_body, collider_aabb, point_light,
                 mesh_type: self.mesh_renderers.get(id).map(|mr| match &mr.mesh_type {
@@ -1904,6 +1937,7 @@ impl World {
                     follow_entity: c.follow_entity,
                     is_active: self.active_camera == Some(id),
                 }),
+                parent_index,
             });
         }
 
@@ -2039,6 +2073,7 @@ impl World {
             .chain(self.colliders.iter().map(|(id, _)| id))
             .chain(self.point_lights.iter().map(|(id, _)| id))
             .chain(self.cameras.iter().map(|(id, _)| id))
+            .chain(self.parents.iter().map(|(id, _)| id))
             .filter(|id| !self.persistent_entities.contains(id))
             .collect();
 
@@ -2051,6 +2086,7 @@ impl World {
             self.colliders.remove(id);
             self.point_lights.remove(id);
             self.cameras.remove(id);
+            self.parents.remove(id);
         }
         self.active_camera = None;
 

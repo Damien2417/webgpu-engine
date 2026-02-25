@@ -92,6 +92,8 @@ pub struct SceneEntityData {
     pub tag: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub camera: Option<SceneCameraComponent>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub parent_index: Option<usize>,  // index dans le tableau entities (pas l'ID moteur)
 }
 
 /// Structure top-level du fichier JSON de scène.
