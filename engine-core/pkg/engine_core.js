@@ -124,6 +124,15 @@ export class World {
         wasm.world_fit_collider_to_mesh(this.__wbg_ptr, id, min_half_y);
     }
     /**
+     * Retourne les IDs des enfants directs de parent_id.
+     * @param {number} parent_id
+     * @returns {Uint32Array}
+     */
+    get_children(parent_id) {
+        const ret = wasm.world_get_children(this.__wbg_ptr, parent_id);
+        return ret;
+    }
+    /**
      * Retourne [hx, hy, hz] du collider, ou [0,0,0] si absent.
      * @param {number} id
      * @returns {Float32Array}
@@ -186,6 +195,15 @@ export class World {
         }
     }
     /**
+     * Retourne l'ID du parent, ou u32::MAX si pas de parent.
+     * @param {number} child_id
+     * @returns {number}
+     */
+    get_parent(child_id) {
+        const ret = wasm.world_get_parent(this.__wbg_ptr, child_id);
+        return ret >>> 0;
+    }
+    /**
      * Retourne le tag d'une entité ("" si aucun tag assigné).
      * @param {number} id
      * @returns {string}
@@ -230,6 +248,15 @@ export class World {
         return ret;
     }
     /**
+     * Retourne [px, py, pz, rx, ry, rz, sx, sy, sz] en espace monde.
+     * @param {number} id
+     * @returns {Float32Array}
+     */
+    get_world_transform_array(id) {
+        const ret = wasm.world_get_world_transform_array(this.__wbg_ptr, id);
+        return ret;
+    }
+    /**
      * Charge une scène depuis un JSON string.
      * Supprime les entités non-persistantes, puis crée les entités du JSON.
      * Retourne un Uint32Array des IDs des nouvelles entités créées.
@@ -270,6 +297,14 @@ export class World {
      */
     remove_entity(id) {
         wasm.world_remove_entity(this.__wbg_ptr, id);
+    }
+    /**
+     * Retire le parent de child_id.
+     * Convertit le local transform en world transform.
+     * @param {number} child_id
+     */
+    remove_parent(child_id) {
+        wasm.world_remove_parent(this.__wbg_ptr, child_id);
     }
     /**
      * @param {number} _delta_ms
@@ -385,6 +420,15 @@ export class World {
      */
     set_normal_map(entity_id, normal_tex_id) {
         wasm.world_set_normal_map(this.__wbg_ptr, entity_id, normal_tex_id);
+    }
+    /**
+     * Définit parent_id comme parent de child_id.
+     * Convertit le world transform actuel de child en local relatif à parent.
+     * @param {number} child_id
+     * @param {number} parent_id
+     */
+    set_parent(child_id, parent_id) {
+        wasm.world_set_parent(this.__wbg_ptr, child_id, parent_id);
     }
     /**
      * Marque (ou démarque) une entité comme persistante.
@@ -1365,7 +1409,7 @@ function __wbg_get_imports() {
             arg0.writeTexture(arg1, arg2, arg3, arg4);
         }, arguments); },
         __wbindgen_cast_0000000000000001: function(arg0, arg1) {
-            // Cast intrinsic for `Closure(Closure { dtor_idx: 95, function: Function { arguments: [Externref], shim_idx: 96, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
+            // Cast intrinsic for `Closure(Closure { dtor_idx: 96, function: Function { arguments: [Externref], shim_idx: 97, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
             const ret = makeMutClosure(arg0, arg1, wasm.wasm_bindgen__closure__destroy__h1594f53794f5ca3c, wasm_bindgen__convert__closures_____invoke__hb5a70b2dabc2cd9f);
             return ret;
         },

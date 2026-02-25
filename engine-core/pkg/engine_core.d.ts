@@ -50,6 +50,10 @@ export class World {
      */
     fit_collider_to_mesh(id: number, min_half_y: number): void;
     /**
+     * Retourne les IDs des enfants directs de parent_id.
+     */
+    get_children(parent_id: number): Uint32Array;
+    /**
      * Retourne [hx, hy, hz] du collider, ou [0,0,0] si absent.
      */
     get_collider_array(id: number): Float32Array;
@@ -70,6 +74,10 @@ export class World {
      */
     get_mesh_type(id: number): string;
     /**
+     * Retourne l'ID du parent, ou u32::MAX si pas de parent.
+     */
+    get_parent(child_id: number): number;
+    /**
      * Retourne le tag d'une entité ("" si aucun tag assigné).
      */
     get_tag(id: number): string;
@@ -87,6 +95,10 @@ export class World {
      */
     get_view_proj(): Float32Array;
     /**
+     * Retourne [px, py, pz, rx, ry, rz, sx, sy, sz] en espace monde.
+     */
+    get_world_transform_array(id: number): Float32Array;
+    /**
      * Charge une scène depuis un JSON string.
      * Supprime les entités non-persistantes, puis crée les entités du JSON.
      * Retourne un Uint32Array des IDs des nouvelles entités créées.
@@ -103,6 +115,11 @@ export class World {
      * Supprime une entité et tous ses composants.
      */
     remove_entity(id: number): void;
+    /**
+     * Retire le parent de child_id.
+     * Convertit le local transform en world transform.
+     */
+    remove_parent(child_id: number): void;
     render_frame(_delta_ms: number): void;
     /**
      * Sérialise la scène courante (toutes les entités) en JSON string.
@@ -144,6 +161,11 @@ export class World {
      * Applique une normal map à l'entité (doit avoir un Material).
      */
     set_normal_map(entity_id: number, normal_tex_id: number): void;
+    /**
+     * Définit parent_id comme parent de child_id.
+     * Convertit le world transform actuel de child en local relatif à parent.
+     */
+    set_parent(child_id: number, parent_id: number): void;
     /**
      * Marque (ou démarque) une entité comme persistante.
      * Les entités persistantes survivent aux appels à load_scene().
@@ -196,20 +218,24 @@ export interface InitOutput {
     readonly world_add_transform: (a: number, b: number, c: number, d: number, e: number) => void;
     readonly world_create_entity: (a: number) => number;
     readonly world_fit_collider_to_mesh: (a: number, b: number, c: number) => void;
+    readonly world_get_children: (a: number, b: number) => any;
     readonly world_get_collider_array: (a: number, b: number) => any;
     readonly world_get_entity_by_tag: (a: number, b: number, c: number) => number;
     readonly world_get_entity_ids: (a: number) => any;
     readonly world_get_entity_name: (a: number, b: number) => [number, number];
     readonly world_get_mesh_type: (a: number, b: number) => [number, number];
+    readonly world_get_parent: (a: number, b: number) => number;
     readonly world_get_tag: (a: number, b: number) => [number, number];
     readonly world_get_transform_array: (a: number, b: number) => any;
     readonly world_get_velocity: (a: number, b: number) => any;
     readonly world_get_view_proj: (a: number) => any;
+    readonly world_get_world_transform_array: (a: number, b: number) => any;
     readonly world_load_scene: (a: number, b: number, c: number) => any;
     readonly world_new: (a: any) => any;
     readonly world_register_texture: (a: number, b: number, c: number, d: number) => void;
     readonly world_remove_active_camera: (a: number) => void;
     readonly world_remove_entity: (a: number, b: number) => void;
+    readonly world_remove_parent: (a: number, b: number) => void;
     readonly world_render_frame: (a: number, b: number) => void;
     readonly world_save_scene: (a: number) => [number, number];
     readonly world_set_active_camera: (a: number, b: number) => void;
@@ -222,6 +248,7 @@ export interface InitOutput {
     readonly world_set_input: (a: number, b: number, c: number, d: number) => void;
     readonly world_set_mesh_type: (a: number, b: number, c: number, d: number) => void;
     readonly world_set_normal_map: (a: number, b: number, c: number) => void;
+    readonly world_set_parent: (a: number, b: number, c: number) => void;
     readonly world_set_persistent: (a: number, b: number, c: number) => void;
     readonly world_set_player: (a: number, b: number) => void;
     readonly world_set_position: (a: number, b: number, c: number, d: number, e: number) => void;
