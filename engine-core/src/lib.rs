@@ -1126,14 +1126,7 @@ impl World {
             let Some(mesh_renderer) = self.mesh_renderers.get(id) else { continue };
             let Some(gpu) = self.entity_gpus.get(id) else { continue };
 
-            let model = Mat4::from_translation(transform.position)
-                * Mat4::from_euler(
-                    EulerRot::XYZ,
-                    transform.rotation.x.to_radians(),
-                    transform.rotation.y.to_radians(),
-                    transform.rotation.z.to_radians(),
-                )
-                * Mat4::from_scale(transform.scale);
+            let model = self.compute_world_matrix(id);
             let mvp = view_proj * model;
 
             let (metallic, roughness, emissive) = self.materials.get(id)
@@ -1855,6 +1848,35 @@ impl World {
 }
 
 impl World {
+    /// Calcule la matrice world de l'entité en remontant la chaîne de parents.
+    /// Les entités racines (sans parent) retournent directement leur matrix locale.
+    fn compute_world_matrix(&self, id: usize) -> Mat4 {
+        let local = self.transforms.get(id)
+            .map(|t| {
+                Mat4::from_translation(t.position)
+                    * Mat4::from_euler(
+                        EulerRot::XYZ,
+                        t.rotation.x.to_radians(),
+                        t.rotation.y.to_radians(),
+                        t.rotation.z.to_radians(),
+                    )
+                    * Mat4::from_scale(t.scale)
+            })
+            .unwrap_or(Mat4::IDENTITY);
+
+        if let Some(parent) = self.parents.get(id) {
+            self.compute_world_matrix(parent.parent_id) * local
+        } else {
+            local
+        }
+    }
+
+    /// Convertit un Quat glam en Vec3 euler XYZ en degrés.
+    fn quat_to_euler_deg(q: glam::Quat) -> glam::Vec3 {
+        let (x, y, z) = q.to_euler(EulerRot::XYZ);
+        glam::Vec3::new(x.to_degrees(), y.to_degrees(), z.to_degrees())
+    }
+
     fn build_view_from_transform(t: &Transform) -> glam::Mat4 {
         use glam::{Mat4, Vec3, Vec4};
 
