@@ -10,7 +10,8 @@ export default function ScriptPanel({ entityId }: { entityId: EntityId }) {
   return (
     <PanelSection title="Script (JS)" onRemove={() => removeComponent(entityId, 'script')}>
       <div style={{ fontSize: 10, color: 'var(--text-dim)', marginBottom: 4 }}>
-        Script body executed each frame in Play mode with <code>entity</code>, <code>engine</code>, <code>deltaMs</code>.
+        Executed each frame in Play mode. Args: <code>entity</code>, <code>engine</code>, <code>deltaMs</code>.<br />
+        <code>getPosition</code>/<code>setPosition</code> = <b>local space</b>. Use <code>getWorldPosition</code> for world space.
       </div>
       <textarea
         value={script}

@@ -25,10 +25,10 @@ const DEFAULT_VALUES: Required<EntityComponents> = {
   rigidbody:        { isStatic: true },
   collider:         { hx: 0.5, hy: 0.5, hz: 0.5 },
   pointLight:       { r: 1, g: 1, b: 1, intensity: 5.0 },
-  directionalLight: { dx: 0.3, dy: -1, dz: 0.5, r: 1, g: 0.95, b: 0.8, intensity: 1.5 },
+  directionalLight: { dx: 0.3, dy: -1, dz: 0.5, r: 1, g: 0.95, b: 0.8, intensity: 100, coneAngle: 30 },
   isPlayer:         true,
-  script:           '// Script body executed every frame in Play mode.\n// Available: entity.id, engine, deltaMs (ms)\n\nconst [x, y, z] = engine.getPosition(entity.id);\nengine.setPosition(entity.id, x, y + Math.sin(Date.now() * 0.001) * 0.001, z);',
-  camera:           { fov: 60, near: 0.1, far: 1000, isActive: false, followEntity: true },
+  script:           '// Script body — runs every frame in Play mode.\n// getPosition/setPosition = LOCAL space (relative to parent).\n// Use getWorldPosition/setWorldPosition for world space.\n\n// Bobbing example (works on child entities too):\nvar baseY = null;\nif (baseY === null) baseY = engine.getPosition(entity.id)[1];\nvar [lx, , lz] = engine.getPosition(entity.id);\nengine.setPosition(entity.id, lx, baseY + Math.sin(Date.now() * 0.003) * 0.05, lz);',
+  camera:           { fov: 60, near: 0.1, far: 1000, isActive: false, followEntity: false },
   particle:         {
     rate: 20,
     lifetime: 1.8,
@@ -80,7 +80,7 @@ export default function AddComponentButton({ entityId }: { entityId: EntityId })
       }
       case 'directionalLight': {
         const l = DEFAULT_VALUES.directionalLight;
-        bridge.addDirectionalLight(l.dx, l.dy, l.dz, l.r, l.g, l.b, l.intensity);
+        bridge.addDirectionalLightEntity(entityId, l.r, l.g, l.b, l.intensity, l.coneAngle);
         break;
       }
       case 'isPlayer': {

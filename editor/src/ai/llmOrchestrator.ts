@@ -41,7 +41,65 @@ Grouping rules (IMPORTANT):
 - A single primitive (a lone cube, plane, sphere) does NOT need a group.
 - Moving/rotating/scaling the group entity automatically affects all children — prefer
   editing the group transform rather than individual parts.
-- When the user asks to move, rotate or scale a composite object, target the group entity.`;
+- When the user asks to move, rotate or scale a composite object, target the group entity.
+
+Script component rules (IMPORTANT):
+- Scripts are JavaScript strings executed every frame during Play mode.
+- The script body receives three implicit parameters: entity, engine, deltaMs.
+  • entity  — { id: number } — the entity this script is attached to.
+  • engine  — API object (see below).
+  • deltaMs — elapsed time since last frame in milliseconds (use deltaMs/1000 for seconds).
+- The script runs as the BODY of a function (no "function" keyword, no "export").
+  Write statements directly, e.g.:
+    engine.setPosition(entity.id, x, y, z);
+- engine API:
+    — LOCAL space (relative to parent, same as inspector values):
+    engine.getPosition(id)               → [x, y, z]
+    engine.setPosition(id, x, y, z)
+    engine.getRotation(id)               → [x, y, z] (Euler degrees)
+    engine.setRotation(id, x, y, z)
+    engine.getScale(id)                  → [x, y, z]
+    engine.setScale(id, x, y, z)
+    — WORLD space (absolute in the scene):
+    engine.getWorldPosition(id)          → [x, y, z]
+    engine.setWorldPosition(id, x, y, z) (auto-converts to local if entity has a parent)
+    engine.getWorldRotation(id)          → [x, y, z] (Euler degrees)
+    — Physics:
+    engine.getVelocity(id)               → [x, y, z]  (requires rigidbody)
+    engine.setVelocity(id, x, y, z)      (requires rigidbody)
+    engine.getKey(key)                   → boolean  (e.g. getKey('arrowleft'))
+    — Scene:
+    engine.getEntityByTag(tag)           → number | null
+    engine.getEntityIds()                → number[]
+    engine.getEntityName(id)             → string
+    engine.spawnEntity(name)             → number  (creates a new entity with mesh)
+    engine.destroyEntity(id)
+    engine.log(...args)                  → prints to the in-editor Console panel (green)
+    engine.warn(...args)                 → prints a warning to the Console (yellow)
+- IMPORTANT limitations:
+    • No access to DOM, window, fetch, or any browser API.
+    • No import / require / async / await.
+    • Do not call engine.spawnEntity or engine.destroyEntity every frame — only on events.
+    • Persistent state between frames: use a variable declared with var at top of script
+      (var persists across calls because the function is re-created once at compile time).
+- Example — rotate entity continuously:
+    var speed = 90; // degrees per second
+    var [rx, ry, rz] = engine.getRotation(entity.id);
+    engine.setRotation(entity.id, rx, ry + speed * deltaMs / 1000, rz);
+- Example — keyboard-driven movement:
+    var spd = 3;
+    var dt = deltaMs / 1000;
+    var [x, y, z] = engine.getPosition(entity.id);
+    if (engine.getKey('arrowleft'))  x -= spd * dt;
+    if (engine.getKey('arrowright')) x += spd * dt;
+    engine.setPosition(entity.id, x, y, z);
+- Example — bobbing child entity (e.g. flashlight attached to player):
+    var baseY = null;
+    if (baseY === null) baseY = engine.getPosition(entity.id)[1]; // capture local Y once
+    var [lx, , lz] = engine.getPosition(entity.id);
+    engine.setPosition(entity.id, lx, baseY + Math.sin(Date.now() * 0.003) * 0.0005, lz);
+- To add or replace a script on an entity, ALWAYS use the write_script tool with
+  entityId and code (a plain string). NEVER use add_component or update_component for scripts.`;
 
 export interface AgentRound {
   calls:   ToolCall[];
