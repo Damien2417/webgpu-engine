@@ -52,6 +52,19 @@ export class World {
         wasm.world_add_directional_light(this.__wbg_ptr, dx, dy, dz, r, g, b, intensity);
     }
     /**
+     * Ajoute une lumière directionnelle (spotlight) pilotée par l'entité `id`.
+     * `cone_angle_deg` : demi-angle extérieur du cône en degrés (ex: 30.0).
+     * @param {number} id
+     * @param {number} r
+     * @param {number} g
+     * @param {number} b
+     * @param {number} intensity
+     * @param {number} cone_angle_deg
+     */
+    add_directional_light_entity(id, r, g, b, intensity, cone_angle_deg) {
+        wasm.world_add_directional_light_entity(this.__wbg_ptr, id, r, g, b, intensity, cone_angle_deg);
+    }
+    /**
      * Rétrocompatibilité Phase 1-5. Utilise add_pbr_material pour le PBR.
      * @param {number} entity_id
      * @param {number} texture_id
@@ -105,6 +118,9 @@ export class World {
      */
     add_transform(id, x, y, z) {
         wasm.world_add_transform(this.__wbg_ptr, id, x, y, z);
+    }
+    clear_preview_camera() {
+        wasm.world_clear_preview_camera(this.__wbg_ptr);
     }
     /**
      * Crée une entité vide. Retourne son handle (usize).
@@ -241,10 +257,20 @@ export class World {
     }
     /**
      * Retourne la matrice view*proj [16 f32, column-major] pour les gizmos.
+     * Utilise toujours la caméra orbitale/active (sans preview), alignée avec le viewport principal.
      * @returns {Float32Array}
      */
     get_view_proj() {
         const ret = wasm.world_get_view_proj(this.__wbg_ptr);
+        return ret;
+    }
+    /**
+     * Retourne la matrice monde [16 f32, column-major] d'une entité (résolution hiérarchie).
+     * @param {number} id
+     * @returns {Float32Array}
+     */
+    get_world_matrix(id) {
+        const ret = wasm.world_get_world_matrix(this.__wbg_ptr, id);
         return ret;
     }
     /**
@@ -255,6 +281,15 @@ export class World {
     get_world_transform_array(id) {
         const ret = wasm.world_get_world_transform_array(this.__wbg_ptr, id);
         return ret;
+    }
+    /**
+     * Retourne true si l'entité a un MeshRenderer.
+     * @param {number} id
+     * @returns {boolean}
+     */
+    has_mesh_renderer(id) {
+        const ret = wasm.world_has_mesh_renderer(this.__wbg_ptr, id);
+        return ret !== 0;
     }
     /**
      * Charge une scène depuis un JSON string.
@@ -292,6 +327,19 @@ export class World {
         wasm.world_remove_active_camera(this.__wbg_ptr);
     }
     /**
+     * Supprime le composant Camera d'une entité (sans supprimer l'entité elle-même).
+     * @param {number} id
+     */
+    remove_camera(id) {
+        wasm.world_remove_camera(this.__wbg_ptr, id);
+    }
+    /**
+     * Supprime la lumière directionnelle globale (la scène n'en aura plus).
+     */
+    remove_directional_light() {
+        wasm.world_remove_directional_light(this.__wbg_ptr);
+    }
+    /**
      * Supprime une entité et tous ses composants.
      * @param {number} id
      */
@@ -307,10 +355,24 @@ export class World {
         wasm.world_remove_parent(this.__wbg_ptr, child_id);
     }
     /**
+     * Supprime la point light de l'entité (sans supprimer l'entité elle-même).
+     * @param {number} id
+     */
+    remove_point_light(id) {
+        wasm.world_remove_point_light(this.__wbg_ptr, id);
+    }
+    /**
      * @param {number} _delta_ms
      */
     render_frame(_delta_ms) {
         wasm.world_render_frame(this.__wbg_ptr, _delta_ms);
+    }
+    /**
+     * @param {number} width
+     * @param {number} height
+     */
+    resize(width, height) {
+        wasm.world_resize(this.__wbg_ptr, width, height);
     }
     /**
      * Sérialise la scène courante (toutes les entités) en JSON string.
@@ -361,6 +423,13 @@ export class World {
      */
     set_camera_follow_entity(id, follow_entity) {
         wasm.world_set_camera_follow_entity(this.__wbg_ptr, id, follow_entity);
+    }
+    /**
+     * Lie une entité existante à la lumière directionnelle (sa rotation pilote la direction).
+     * @param {number} id
+     */
+    set_directional_light_entity(id) {
+        wasm.world_set_directional_light_entity(this.__wbg_ptr, id);
     }
     /**
      * Rend un objet émissif (ex: ampoule, néon).
@@ -424,6 +493,7 @@ export class World {
     /**
      * Définit parent_id comme parent de child_id.
      * Convertit le world transform actuel de child en local relatif à parent.
+     * Retourne false si la relation créerait un cycle (ou auto-parent).
      * @param {number} child_id
      * @param {number} parent_id
      */
@@ -454,6 +524,13 @@ export class World {
      */
     set_position(id, x, y, z) {
         wasm.world_set_position(this.__wbg_ptr, id, x, y, z);
+    }
+    /**
+     * Prévisualise cette caméra dans le viewport de l'éditeur (sans activer le game mode).
+     * @param {number} id
+     */
+    set_preview_camera(id) {
+        wasm.world_set_preview_camera(this.__wbg_ptr, id);
     }
     /**
      * @param {number} id
@@ -492,6 +569,17 @@ export class World {
      */
     set_velocity(id, x, y, z) {
         wasm.world_set_velocity(this.__wbg_ptr, id, x, y, z);
+    }
+    /**
+     * Déplace l'entité vers une position en espace MONDE.
+     * Convertit automatiquement en espace local si l'entité a un parent.
+     * @param {number} id
+     * @param {number} x
+     * @param {number} y
+     * @param {number} z
+     */
+    set_world_position(id, x, y, z) {
+        wasm.world_set_world_position(this.__wbg_ptr, id, x, y, z);
     }
     /**
      * Met à jour la physique et la caméra FPS. Appeler avant render_frame().
@@ -852,8 +940,14 @@ function __wbg_get_imports() {
         __wbg_setPipeline_b632e313f54b1cb1: function(arg0, arg1) {
             arg0.setPipeline(arg1);
         },
+        __wbg_setScissorRect_13be2665184d6e20: function(arg0, arg1, arg2, arg3, arg4) {
+            arg0.setScissorRect(arg1 >>> 0, arg2 >>> 0, arg3 >>> 0, arg4 >>> 0);
+        },
         __wbg_setVertexBuffer_c8234139ead62a61: function(arg0, arg1, arg2, arg3, arg4) {
             arg0.setVertexBuffer(arg1 >>> 0, arg2, arg3, arg4);
+        },
+        __wbg_setViewport_b25340c5cfc5e64f: function(arg0, arg1, arg2, arg3, arg4, arg5, arg6) {
+            arg0.setViewport(arg1, arg2, arg3, arg4, arg5, arg6);
         },
         __wbg_set_25cf9deff6bf0ea8: function(arg0, arg1, arg2) {
             arg0.set(arg1, arg2 >>> 0);
@@ -1409,7 +1503,7 @@ function __wbg_get_imports() {
             arg0.writeTexture(arg1, arg2, arg3, arg4);
         }, arguments); },
         __wbindgen_cast_0000000000000001: function(arg0, arg1) {
-            // Cast intrinsic for `Closure(Closure { dtor_idx: 96, function: Function { arguments: [Externref], shim_idx: 97, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
+            // Cast intrinsic for `Closure(Closure { dtor_idx: 97, function: Function { arguments: [Externref], shim_idx: 98, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
             const ret = makeMutClosure(arg0, arg1, wasm.wasm_bindgen__closure__destroy__h1594f53794f5ca3c, wasm_bindgen__convert__closures_____invoke__hb5a70b2dabc2cd9f);
             return ret;
         },

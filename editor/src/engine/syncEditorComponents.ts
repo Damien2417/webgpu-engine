@@ -34,7 +34,7 @@ export function syncEditorComponentsToEngine(): void {
 
     if (comps.directionalLight !== undefined) {
       const l = comps.directionalLight;
-      bridge.addDirectionalLight(l.dx, l.dy, l.dz, l.r, l.g, l.b, l.intensity);
+      bridge.addDirectionalLightEntity(id, l.r, l.g, l.b, l.intensity, l.coneAngle ?? 30);
     }
 
     if (comps.isPlayer !== undefined) {

@@ -16,6 +16,11 @@ export class World {
      */
     add_directional_light(dx: number, dy: number, dz: number, r: number, g: number, b: number, intensity: number): void;
     /**
+     * Ajoute une lumière directionnelle (spotlight) pilotée par l'entité `id`.
+     * `cone_angle_deg` : demi-angle extérieur du cône en degrés (ex: 30.0).
+     */
+    add_directional_light_entity(id: number, r: number, g: number, b: number, intensity: number, cone_angle_deg: number): void;
+    /**
      * Rétrocompatibilité Phase 1-5. Utilise add_pbr_material pour le PBR.
      */
     add_material(entity_id: number, texture_id: number): void;
@@ -40,6 +45,7 @@ export class World {
      * Ajoute un composant Transform à l'entité (position initiale xyz).
      */
     add_transform(id: number, x: number, y: number, z: number): void;
+    clear_preview_camera(): void;
     /**
      * Crée une entité vide. Retourne son handle (usize).
      */
@@ -92,12 +98,21 @@ export class World {
     get_velocity(id: number): Float32Array;
     /**
      * Retourne la matrice view*proj [16 f32, column-major] pour les gizmos.
+     * Utilise toujours la caméra orbitale/active (sans preview), alignée avec le viewport principal.
      */
     get_view_proj(): Float32Array;
+    /**
+     * Retourne la matrice monde [16 f32, column-major] d'une entité (résolution hiérarchie).
+     */
+    get_world_matrix(id: number): Float32Array;
     /**
      * Retourne [px, py, pz, rx, ry, rz, sx, sy, sz] en espace monde.
      */
     get_world_transform_array(id: number): Float32Array;
+    /**
+     * Retourne true si l'entité a un MeshRenderer.
+     */
+    has_mesh_renderer(id: number): boolean;
     /**
      * Charge une scène depuis un JSON string.
      * Supprime les entités non-persistantes, puis crée les entités du JSON.
@@ -112,6 +127,14 @@ export class World {
     register_texture(name: string, texture_id: number): void;
     remove_active_camera(): void;
     /**
+     * Supprime le composant Camera d'une entité (sans supprimer l'entité elle-même).
+     */
+    remove_camera(id: number): void;
+    /**
+     * Supprime la lumière directionnelle globale (la scène n'en aura plus).
+     */
+    remove_directional_light(): void;
+    /**
      * Supprime une entité et tous ses composants.
      */
     remove_entity(id: number): void;
@@ -120,7 +143,12 @@ export class World {
      * Convertit le local transform en world transform.
      */
     remove_parent(child_id: number): void;
+    /**
+     * Supprime la point light de l'entité (sans supprimer l'entité elle-même).
+     */
+    remove_point_light(id: number): void;
     render_frame(_delta_ms: number): void;
+    resize(width: number, height: number): void;
     /**
      * Sérialise la scène courante (toutes les entités) en JSON string.
      */
@@ -132,6 +160,10 @@ export class World {
     set_ambient_light(r: number, g: number, b: number, intensity: number): void;
     set_camera(ex: number, ey: number, ez: number, tx: number, ty: number, tz: number): void;
     set_camera_follow_entity(id: number, follow_entity: boolean): void;
+    /**
+     * Lie une entité existante à la lumière directionnelle (sa rotation pilote la direction).
+     */
+    set_directional_light_entity(id: number): void;
     /**
      * Rend un objet émissif (ex: ampoule, néon).
      * r,g,b > 1.0 permet de faire du "bloom" si on avait du post-process,
@@ -164,6 +196,7 @@ export class World {
     /**
      * Définit parent_id comme parent de child_id.
      * Convertit le world transform actuel de child en local relatif à parent.
+     * Retourne false si la relation créerait un cycle (ou auto-parent).
      */
     set_parent(child_id: number, parent_id: number): void;
     /**
@@ -176,6 +209,10 @@ export class World {
      */
     set_player(id: number): void;
     set_position(id: number, x: number, y: number, z: number): void;
+    /**
+     * Prévisualise cette caméra dans le viewport de l'éditeur (sans activer le game mode).
+     */
+    set_preview_camera(id: number): void;
     set_rotation(id: number, x: number, y: number, z: number): void;
     set_scale(id: number, x: number, y: number, z: number): void;
     /**
@@ -186,6 +223,11 @@ export class World {
      * Définit la velocity d'un RigidBody.
      */
     set_velocity(id: number, x: number, y: number, z: number): void;
+    /**
+     * Déplace l'entité vers une position en espace MONDE.
+     * Convertit automatiquement en espace local si l'entité a un parent.
+     */
+    set_world_position(id: number, x: number, y: number, z: number): void;
     /**
      * Met à jour la physique et la caméra FPS. Appeler avant render_frame().
      */
@@ -210,12 +252,14 @@ export interface InitOutput {
     readonly world_add_camera: (a: number, b: number, c: number, d: number, e: number) => void;
     readonly world_add_collider_aabb: (a: number, b: number, c: number, d: number, e: number) => void;
     readonly world_add_directional_light: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => void;
+    readonly world_add_directional_light_entity: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => void;
     readonly world_add_material: (a: number, b: number, c: number) => void;
     readonly world_add_mesh_renderer: (a: number, b: number) => void;
     readonly world_add_pbr_material: (a: number, b: number, c: number, d: number, e: number) => void;
     readonly world_add_point_light: (a: number, b: number, c: number, d: number, e: number, f: number) => void;
     readonly world_add_rigid_body: (a: number, b: number, c: number) => void;
     readonly world_add_transform: (a: number, b: number, c: number, d: number, e: number) => void;
+    readonly world_clear_preview_camera: (a: number) => void;
     readonly world_create_entity: (a: number) => number;
     readonly world_fit_collider_to_mesh: (a: number, b: number, c: number) => void;
     readonly world_get_children: (a: number, b: number) => any;
@@ -229,19 +273,26 @@ export interface InitOutput {
     readonly world_get_transform_array: (a: number, b: number) => any;
     readonly world_get_velocity: (a: number, b: number) => any;
     readonly world_get_view_proj: (a: number) => any;
+    readonly world_get_world_matrix: (a: number, b: number) => any;
     readonly world_get_world_transform_array: (a: number, b: number) => any;
+    readonly world_has_mesh_renderer: (a: number, b: number) => number;
     readonly world_load_scene: (a: number, b: number, c: number) => any;
     readonly world_new: (a: any) => any;
     readonly world_register_texture: (a: number, b: number, c: number, d: number) => void;
     readonly world_remove_active_camera: (a: number) => void;
+    readonly world_remove_camera: (a: number, b: number) => void;
+    readonly world_remove_directional_light: (a: number) => void;
     readonly world_remove_entity: (a: number, b: number) => void;
     readonly world_remove_parent: (a: number, b: number) => void;
+    readonly world_remove_point_light: (a: number, b: number) => void;
     readonly world_render_frame: (a: number, b: number) => void;
+    readonly world_resize: (a: number, b: number, c: number) => void;
     readonly world_save_scene: (a: number) => [number, number];
     readonly world_set_active_camera: (a: number, b: number) => void;
     readonly world_set_ambient_light: (a: number, b: number, c: number, d: number, e: number) => void;
     readonly world_set_camera: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => void;
     readonly world_set_camera_follow_entity: (a: number, b: number, c: number) => void;
+    readonly world_set_directional_light_entity: (a: number, b: number) => void;
     readonly world_set_emissive: (a: number, b: number, c: number, d: number, e: number) => void;
     readonly world_set_entity_name: (a: number, b: number, c: number, d: number) => void;
     readonly world_set_game_mode: (a: number, b: number) => void;
@@ -252,10 +303,12 @@ export interface InitOutput {
     readonly world_set_persistent: (a: number, b: number, c: number) => void;
     readonly world_set_player: (a: number, b: number) => void;
     readonly world_set_position: (a: number, b: number, c: number, d: number, e: number) => void;
+    readonly world_set_preview_camera: (a: number, b: number) => void;
     readonly world_set_rotation: (a: number, b: number, c: number, d: number, e: number) => void;
     readonly world_set_scale: (a: number, b: number, c: number, d: number, e: number) => void;
     readonly world_set_tag: (a: number, b: number, c: number, d: number) => void;
     readonly world_set_velocity: (a: number, b: number, c: number, d: number, e: number) => void;
+    readonly world_set_world_position: (a: number, b: number, c: number, d: number, e: number) => void;
     readonly world_update: (a: number, b: number) => void;
     readonly world_upload_custom_mesh: (a: number, b: number, c: number, d: number, e: number) => number;
     readonly world_upload_texture: (a: number, b: number, c: number, d: number, e: number, f: number) => number;

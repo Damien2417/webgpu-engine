@@ -68,8 +68,10 @@ struct EntityUniforms {
 #[repr(C)]
 #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
 struct GpuDirectionalLight {
-    direction: [f32; 3], _p0: f32,
-    color:     [f32; 3], intensity: f32,
+    direction:     [f32; 3], _p0: f32,
+    color:         [f32; 3], intensity: f32,
+    position:      [f32; 3], _p1: f32,
+    cone_cos_outer: f32, cone_cos_inner: f32, _p2: [f32; 2],
 }
 
 #[repr(C)]
@@ -83,7 +85,7 @@ struct GpuPointLight {
 #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
 struct LightUniforms {
     camera_pos:      [f32; 4],            //  16 bytes — offset   0
-    directional:     GpuDirectionalLight, //  32 bytes — offset  16
+    directional:     GpuDirectionalLight, //  64 bytes — offset  16
     n_points:        u32,                 //   4 bytes — offset  48
     _pad:            [u32; 3],            //  12 bytes — offset  52
     points:          [GpuPointLight; 8],  // 256 bytes — offset  64
@@ -94,9 +96,10 @@ struct LightUniforms {
 
 /// Données CPU pour la lumière directionnelle unique.
 struct DirectionalLightData {
-    direction: glam::Vec3,
-    color:     glam::Vec3,
-    intensity: f32,
+    direction:      glam::Vec3,
+    color:          glam::Vec3,
+    intensity:      f32,
+    cone_angle_deg: f32,  // demi-angle extérieur du cône en degrés
 }
 
 #[wasm_bindgen]
@@ -142,6 +145,7 @@ pub struct World {
     // Éclairage
     point_lights:            SparseSet<PointLight>,
     directional_light:       Option<DirectionalLightData>,
+    directional_light_entity: Option<usize>,  // entité dont la rotation pilote la direction
     light_bind_group_layout: wgpu::BindGroupLayout,
     light_buffer:            wgpu::Buffer,
     light_bind_group:        wgpu::BindGroup,
@@ -177,20 +181,35 @@ pub struct World {
     ambient_intensity: f32,
 
     // Camera entities
-    cameras:       SparseSet<CameraComponent>,
-    active_camera: Option<usize>,
-    is_game_mode:  bool,   // true = Play mode; false = Editor mode (orbital camera)
+    cameras:        SparseSet<CameraComponent>,
+    active_camera:  Option<usize>,
+    preview_camera: Option<usize>,  // shows inset preview in editor (no game mode needed)
+    is_game_mode:   bool,   // true = Play mode; false = Editor mode (orbital camera)
+
+    // Inset preview depth buffer (separate from main depth, sized at ~1/4 canvas)
+    inset_depth_texture: wgpu::Texture,
+    inset_depth_view:    wgpu::TextureView,
+    inset_w: u32,
+    inset_h: u32,
 }
 
 fn create_depth_texture(
     device: &wgpu::Device,
     config: &wgpu::SurfaceConfiguration,
 ) -> (wgpu::Texture, wgpu::TextureView) {
+    create_depth_texture_wh(device, config.width, config.height)
+}
+
+fn create_depth_texture_wh(
+    device: &wgpu::Device,
+    width:  u32,
+    height: u32,
+) -> (wgpu::Texture, wgpu::TextureView) {
     let texture = device.create_texture(&wgpu::TextureDescriptor {
         label: Some("depth_texture"),
         size: wgpu::Extent3d {
-            width:                 config.width,
-            height:                config.height,
+            width,
+            height,
             depth_or_array_layers: 1,
         },
         mip_level_count: 1,
@@ -307,13 +326,18 @@ fn create_texture_from_data(
 
 /// Calcule le MTV pour séparer A de B (à soustraire de la position de A).
 /// Retourne None si pas de chevauchement.
-/// Calcule la matrice light-space pour la shadow map (directional light).
-/// Vue ortho depuis -direction×30, projection couvrant ±20 unités.
-fn compute_light_space_mat(direction: glam::Vec3) -> glam::Mat4 {
-    let dir       = direction.normalize();
-    let light_pos = -dir * 30.0;
-    let view      = glam::Mat4::look_at_rh(light_pos, glam::Vec3::ZERO, glam::Vec3::Y);
-    let proj      = glam::Mat4::orthographic_rh(-20.0, 20.0, -20.0, 20.0, 0.1, 100.0);
+/// Calcule la matrice light-space pour la shadow map spotlight.
+/// Projection perspective depuis `light_pos` dans `direction` (cône 60°).
+fn compute_light_space_mat(direction: glam::Vec3, light_pos: glam::Vec3) -> glam::Mat4 {
+    let dir = direction.normalize();
+    // Vecteur up : évite le gimbal lock quand la lampe pointe vers le bas
+    let up = if dir.y.abs() > 0.99 { glam::Vec3::X } else { glam::Vec3::Y };
+    let view = glam::Mat4::look_at_rh(light_pos, light_pos + dir, up);
+    let proj = glam::Mat4::perspective_rh(
+        60.0_f32.to_radians(), // 60° FOV = cône 30° demi-angle
+        1.0,                   // shadow map carrée
+        0.1, 200.0,
+    );
     proj * view
 }
 
@@ -490,7 +514,7 @@ impl World {
             label:              Some("light_buffer"),
             size:               std::mem::size_of::<LightUniforms>() as u64,
             // Round up to next multiple of 16 for WebGPU uniform buffer alignment.
-            // LightUniforms is 400 bytes which is already a multiple of 16.
+            // LightUniforms is 432 bytes which is already a multiple of 16.
             usage:              wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
@@ -714,6 +738,11 @@ impl World {
 
         web_sys::console::log_1(&"[World] Pipeline 3D initialisée".into());
 
+        // Pre-compute inset preview depth texture before config/device are moved into World.
+        let inset_w = (config.width / 4).max(1);
+        let inset_h = ((inset_w as f32 * 9.0 / 16.0) as u32).max(1);
+        let (inset_depth_texture, inset_depth_view) = create_depth_texture_wh(&device, inset_w, inset_h);
+
         Ok(World {
             device,
             queue,
@@ -746,6 +775,7 @@ impl World {
             camera_pitch:  0.0,
             point_lights:      SparseSet::new(),
             directional_light: None,
+            directional_light_entity: None,
             light_bind_group_layout,
             light_buffer,
             light_bind_group,
@@ -766,8 +796,13 @@ impl World {
             ambient_color: glam::Vec3::new(0.1, 0.1, 0.1),
             ambient_intensity: 0.5,
             cameras:       SparseSet::new(),
-            active_camera: None,
-            is_game_mode:  false,
+            active_camera:  None,
+            preview_camera: None,
+            is_game_mode:   false,
+            inset_w,
+            inset_h,
+            inset_depth_texture,
+            inset_depth_view,
         })
     }
 }
@@ -820,18 +855,50 @@ impl World {
 
     /// Supprime une entité et tous ses composants.
     pub fn remove_entity(&mut self, id: usize) {
-        self.transforms.remove(id);
-        self.mesh_renderers.remove(id);
-        self.materials.remove(id);
-        self.rigid_bodies.remove(id);
-        self.colliders.remove(id);
-        self.point_lights.remove(id);
-        self.entity_gpus.remove(id);
-        self.entity_names.remove(&id);
-        self.tags.remove(&id);
-        self.persistent_entities.remove(&id);
-        self.cameras.remove(id);
-        if self.active_camera == Some(id) { self.active_camera = None; }
+        // Collecter l'entité + tous ses descendants (BFS) avant toute suppression.
+        let mut to_delete: Vec<usize> = vec![id];
+        let mut head = 0;
+        while head < to_delete.len() {
+            let current = to_delete[head];
+            let children: Vec<usize> = self.parents.iter()
+                .filter(|(_, p)| p.parent_id == current)
+                .map(|(cid, _)| cid)
+                .collect();
+            to_delete.extend(children);
+            head += 1;
+        }
+
+        // Retirer également l'entrée parent de l'entité racine supprimée
+        // (si elle-même était enfant d'un autre parent).
+        self.parents.remove(id);
+
+        // Supprimer tous les composants pour chaque entité collectée.
+        for eid in to_delete {
+            self.parents.remove(eid);
+            self.transforms.remove(eid);
+            self.mesh_renderers.remove(eid);
+            self.materials.remove(eid);
+            self.rigid_bodies.remove(eid);
+            self.colliders.remove(eid);
+            self.point_lights.remove(eid);
+            self.entity_gpus.remove(eid);
+            self.entity_names.remove(&eid);
+            self.tags.remove(&eid);
+            self.persistent_entities.remove(&eid);
+            self.cameras.remove(eid);
+            if self.active_camera == Some(eid) { self.active_camera = None; }
+            if self.preview_camera == Some(eid) { self.preview_camera = None; }
+            if self.directional_light_entity == Some(eid) {
+                self.directional_light = None;
+                self.directional_light_entity = None;
+            }
+        }
+    }
+
+    /// Retourne true si l'entité a un MeshRenderer.
+    #[wasm_bindgen]
+    pub fn has_mesh_renderer(&self, id: usize) -> bool {
+        self.mesh_renderers.get(id).is_some()
     }
 
     /// Liste les IDs de toutes les entités qui ont un Transform.
@@ -862,8 +929,22 @@ impl World {
 
     /// Définit parent_id comme parent de child_id.
     /// Convertit le world transform actuel de child en local relatif à parent.
+    /// Retourne false si la relation créerait un cycle (ou auto-parent).
     #[wasm_bindgen]
     pub fn set_parent(&mut self, child_id: usize, parent_id: usize) {
+        // Prevent self-parenting.
+        if child_id == parent_id { return; }
+        // Prevent cycles: walk up from parent_id; if we ever reach child_id it's a cycle.
+        {
+            let mut cur = parent_id;
+            loop {
+                if cur == child_id { return; } // cycle detected
+                match self.parents.get(cur) {
+                    Some(p) => cur = p.parent_id,
+                    None    => break,
+                }
+            }
+        }
         let child_world  = self.compute_world_matrix(child_id);
         let parent_world = self.compute_world_matrix(parent_id);
         let local_mat    = parent_world.inverse() * child_world;
@@ -924,10 +1005,17 @@ impl World {
     }
 
     /// Retourne la matrice view*proj [16 f32, column-major] pour les gizmos.
+    /// Utilise toujours la caméra orbitale/active (sans preview), alignée avec le viewport principal.
     pub fn get_view_proj(&self) -> js_sys::Float32Array {
         let aspect = self.config.width as f32 / self.config.height as f32;
-        let vp = self.camera_matrix(aspect);
+        let vp = self.main_camera_matrix(aspect);
         js_sys::Float32Array::from(vp.to_cols_array().as_slice())
+    }
+
+    /// Retourne la matrice monde [16 f32, column-major] d'une entité (résolution hiérarchie).
+    pub fn get_world_matrix(&self, id: usize) -> js_sys::Float32Array {
+        let m = self.compute_world_matrix(id);
+        js_sys::Float32Array::from(m.to_cols_array().as_slice())
     }
 
     // ── Transform ────────────────────────────────────────────────────────────
@@ -954,6 +1042,24 @@ impl World {
     pub fn set_scale(&mut self, id: usize, x: f32, y: f32, z: f32) {
         if let Some(t) = self.transforms.get_mut(id) {
             t.scale = glam::Vec3::new(x, y, z);
+        }
+    }
+
+    /// Déplace l'entité vers une position en espace MONDE.
+    /// Convertit automatiquement en espace local si l'entité a un parent.
+    #[wasm_bindgen]
+    pub fn set_world_position(&mut self, id: usize, x: f32, y: f32, z: f32) {
+        let target = glam::Vec3::new(x, y, z);
+        // Extraire le parent_id sans garder d'emprunt sur self
+        let parent_id = self.parents.get(id).map(|p| p.parent_id);
+        let local = if let Some(pid) = parent_id {
+            let parent_world = self.compute_world_matrix(pid);
+            parent_world.inverse().transform_point3(target)
+        } else {
+            target
+        };
+        if let Some(t) = self.transforms.get_mut(id) {
+            t.position = local;
         }
     }
 
@@ -1075,7 +1181,13 @@ impl World {
     }
 
     pub fn add_camera(&mut self, id: usize, fov: f32, near: f32, far: f32) {
-        self.cameras.insert(id, CameraComponent { fov, near, far, follow_entity: true });
+        // Keep camera projection stable even when UI sends temporary invalid values.
+        let fov  = fov.clamp(1.0, 179.0);
+        let near = near.max(0.001);
+        let far  = far.max(near + 0.001);
+        // Preserve follow mode across camera updates (fov/near/far edits).
+        let follow_entity = self.cameras.get(id).map(|c| c.follow_entity).unwrap_or(false);
+        self.cameras.insert(id, CameraComponent { fov, near, far, follow_entity });
     }
 
     pub fn set_camera_follow_entity(&mut self, id: usize, follow_entity: bool) {
@@ -1085,17 +1197,42 @@ impl World {
     }
 
     pub fn set_active_camera(&mut self, id: usize) {
-        self.active_camera = Some(id);
+        if self.cameras.get(id).is_some() && self.transforms.get(id).is_some() {
+            self.active_camera = Some(id);
+        }
     }
 
     pub fn remove_active_camera(&mut self) {
         self.active_camera = None;
     }
 
+    /// Supprime le composant Camera d'une entité (sans supprimer l'entité elle-même).
+    pub fn remove_camera(&mut self, id: usize) {
+        self.cameras.remove(id);
+        if self.active_camera  == Some(id) { self.active_camera  = None; }
+        if self.preview_camera == Some(id) { self.preview_camera = None; }
+    }
+
+    /// Prévisualise cette caméra dans le viewport de l'éditeur (sans activer le game mode).
+    pub fn set_preview_camera(&mut self, id: usize) {
+        // Keep preview resilient to transient editor/engine desync:
+        // a valid transform is enough (projection falls back to default camera params).
+        if self.transforms.get(id).is_some() {
+            self.preview_camera = Some(id);
+        }
+    }
+
+    pub fn clear_preview_camera(&mut self) {
+        self.preview_camera = None;
+    }
+
     /// Switch between game mode (Play) and editor mode.
     /// In editor mode, the active_camera entity is ignored — orbital camera is always used.
     pub fn set_game_mode(&mut self, enabled: bool) {
         self.is_game_mode = enabled;
+        if enabled {
+            self.sync_look_from_active_camera();
+        }
     }
 
     // ── Textures ──────────────────────────────────────────────────────────────
@@ -1160,6 +1297,24 @@ impl World {
         }
     }
 
+    // ── Resize surface + depth texture ────────────────────────────────────────
+
+    pub fn resize(&mut self, width: u32, height: u32) {
+        if width == 0 || height == 0 { return; }
+        self.config.width  = width;
+        self.config.height = height;
+        self.surface.configure(&self.device, &self.config);
+        let (dt, dv) = create_depth_texture(&self.device, &self.config);
+        self.depth_texture = dt;
+        self.depth_view    = dv;
+        // Recreate inset depth texture at new proportional size
+        self.inset_w = (width / 4).max(1);
+        self.inset_h = ((self.inset_w as f32 * 9.0 / 16.0) as u32).max(1);
+        let (idt, idv) = create_depth_texture_wh(&self.device, self.inset_w, self.inset_h);
+        self.inset_depth_texture = idt;
+        self.inset_depth_view    = idv;
+    }
+
     // ── Rendu ─────────────────────────────────────────────────────────────────
 
     pub fn render_frame(&self, _delta_ms: f32) {
@@ -1169,18 +1324,44 @@ impl World {
                 web_sys::console::error_1(&"[World] GPU hors mémoire".into());
                 return;
             }
-            Err(_) => return,
+            Err(wgpu::SurfaceError::Lost | wgpu::SurfaceError::Outdated) => {
+                web_sys::console::warn_1(&"[World] Surface lost/outdated — reconfiguring".into());
+                self.surface.configure(&self.device, &self.config);
+                return;
+            }
+            Err(e) => {
+                web_sys::console::warn_1(&format!("[World] render_frame surface error: {:?}", e).into());
+                return;
+            }
         };
 
         let view   = output.texture.create_view(&wgpu::TextureViewDescriptor::default());
-        let aspect = self.config.width as f32 / self.config.height as f32;
-        let view_proj = self.camera_matrix(aspect);
+        let aspect = self.config.width as f32 / self.config.height.max(1) as f32;
+        // Main pass always uses the editor/game camera — preview_camera is rendered in a separate inset.
+        let view_proj = self.main_camera_matrix(aspect);
 
         // ── Light space matrix ────────────────────────────────────────────────
-        let light_dir = self.directional_light.as_ref()
-            .map(|dl| dl.direction)
-            .unwrap_or(glam::Vec3::new(0.0, -1.0, 0.0));
-        let lsm = compute_light_space_mat(light_dir);
+        // Si une entité pilote la direction, on lit son vecteur -Z monde.
+        let light_dir = if let Some(dl_id) = self.directional_light_entity {
+            let wm = self.compute_world_matrix(dl_id);
+            let fwd = -(wm.col(2).truncate());
+            if fwd.length_squared() > 1e-6 { fwd.normalize() } else { glam::Vec3::new(0.0, -1.0, 0.0) }
+        } else {
+            self.directional_light.as_ref()
+                .map(|dl| dl.direction.normalize())
+                .unwrap_or(glam::Vec3::new(0.0, -1.0, 0.0))
+        };
+        // Centre de la shadow map = position de l'entité lumière directionnelle.
+        // Déplacer l'entité déplace la zone de couverture des ombres.
+        // Fallback sur la caméra si pas d'entité.
+        let scene_center = if let Some(dl_id) = self.directional_light_entity {
+            self.compute_world_matrix(dl_id).col(3).truncate()
+        } else if let Some(cid) = self.active_camera {
+            self.compute_world_matrix(cid).col(3).truncate()
+        } else {
+            self.camera.eye
+        };
+        let lsm = compute_light_space_mat(light_dir, scene_center);
 
         let mut encoder = self.device.create_command_encoder(
             &wgpu::CommandEncoderDescriptor { label: Some("render_encoder") }
@@ -1228,10 +1409,10 @@ impl World {
         // ── Upload LightUniforms ──────────────────────────────────────────────
         {
             let mut lu = <LightUniforms as bytemuck::Zeroable>::zeroed();
-            let cam_pos = if let Some(pid) = self.player_entity {
-                self.transforms.get(pid).map(|t| t.position).unwrap_or(self.camera.eye)
-            } else if let Some(cid) = self.active_camera {
-                self.transforms.get(cid).map(|t| t.position).unwrap_or(self.camera.eye)
+            let cam_pos = if let Some(cid) = self.active_camera {
+                // Use world position (camera may be a child of another entity).
+                let wm = self.compute_world_matrix(cid);
+                wm.col(3).truncate()
             } else {
                 self.camera.eye
             };
@@ -1239,10 +1420,17 @@ impl World {
             lu.light_space_mat = lsm.to_cols_array_2d();
 
             if let Some(dl) = &self.directional_light {
-                let dir = dl.direction.normalize();
+                // light_dir déjà calculé ci-dessus (depuis entité ou champ direction)
+                let dir = light_dir;
+                let outer_rad = dl.cone_angle_deg.to_radians();
+                let inner_rad = (dl.cone_angle_deg * 0.75).to_radians();
                 lu.directional = GpuDirectionalLight {
                     direction: dir.to_array(), _p0: 0.0,
                     color: dl.color.to_array(), intensity: dl.intensity,
+                    position: scene_center.to_array(), _p1: 0.0,
+                    cone_cos_outer: outer_rad.cos(),
+                    cone_cos_inner: inner_rad.cos(),
+                    _p2: [0.0; 2],
                 };
             }
 
@@ -1250,9 +1438,12 @@ impl World {
             let mut n = 0usize;
             for id in light_ids {
                 if n >= 8 { break; }
-                let (Some(pl), Some(tr)) = (self.point_lights.get(id), self.transforms.get(id)) else { continue };
+                let Some(pl) = self.point_lights.get(id) else { continue };
+                let Some(_)  = self.transforms.get(id) else { continue };
+                let wm = self.compute_world_matrix(id);
+                let wp = wm.col(3).truncate();
                 lu.points[n] = GpuPointLight {
-                    position: tr.position.to_array(), _p0: 0.0,
+                    position: wp.to_array(), _p0: 0.0,
                     color: pl.color.to_array(), intensity: pl.intensity,
                 };
                 n += 1;
@@ -1412,7 +1603,109 @@ impl World {
             }
         }
 
+        // ── Submit shadow + main passes ───────────────────────────────────────
+        // MUST happen before the inset pass re-uploads uniforms with a different VP.
+        // queue.write_buffer calls are consumed at the next submit, so if both the
+        // main VP and inset VP writes land in the same submit, the inset VP wins and
+        // the main pass renders incorrectly (black viewport).
         self.queue.submit(std::iter::once(encoder.finish()));
+
+        // ── Preview camera inset (separate submit, preserves main pass color) ─
+        if let Some(prev_id) = self.preview_camera {
+            if self.transforms.get(prev_id).is_some() {
+                let iw = self.inset_w;
+                let ih = self.inset_h;
+                let inset_aspect = iw as f32 / ih.max(1) as f32;
+
+                if let Some(inset_vp) = self.entity_cam_matrix(prev_id, inset_aspect) {
+                    // Re-upload entity MVPs with the inset camera's view_proj
+                    for (id, mr) in self.mesh_renderers.iter() {
+                        let Some(gpu) = self.entity_gpus.get(id) else { continue };
+                        let model = self.compute_world_matrix(id);
+                        let mvp = inset_vp * model;
+                        let (metallic, roughness, emissive) = self.materials.get(id)
+                            .map(|m| (m.metallic, m.roughness, m.emissive))
+                            .unwrap_or((0.0, 0.5, glam::Vec3::ZERO));
+                        let uv_scale = match &mr.mesh_type {
+                            MeshType::Custom(_) | MeshType::Sphere | MeshType::Cylinder => [1.0, 1.0, 1.0, 0.0],
+                            _ => match self.transforms.get(id) {
+                                Some(t) => [t.scale.x, t.scale.y, t.scale.z, 0.0],
+                                None    => [1.0, 1.0, 1.0, 0.0],
+                            },
+                        };
+                        let uniforms = EntityUniforms {
+                            mvp:   mvp.to_cols_array_2d(),
+                            model: model.to_cols_array_2d(),
+                            metallic, roughness, _pad1: [0.0; 2],
+                            scale: uv_scale,
+                            emissive: emissive.to_array(), _pad2: 0.0,
+                        };
+                        self.queue.write_buffer(&gpu.uniform_buffer, 0, bytemuck::bytes_of(&uniforms));
+                    }
+
+                    let ix = self.config.width.saturating_sub(iw + 10);
+                    let iy = self.config.height.saturating_sub(ih + 10);
+
+                    let mut encoder2 = self.device.create_command_encoder(
+                        &wgpu::CommandEncoderDescriptor { label: Some("inset_encoder") }
+                    );
+                    {
+                        let mut inset_pass = encoder2.begin_render_pass(&wgpu::RenderPassDescriptor {
+                            label: Some("inset_preview_pass"),
+                            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                                view:           &view,
+                                resolve_target: None,
+                                depth_slice:    None,
+                                ops: wgpu::Operations {
+                                    load:  wgpu::LoadOp::Load, // preserve main pass color
+                                    store: wgpu::StoreOp::Store,
+                                },
+                            })],
+                            depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                                view: &self.inset_depth_view,
+                                depth_ops: Some(wgpu::Operations {
+                                    load:  wgpu::LoadOp::Clear(1.0),
+                                    store: wgpu::StoreOp::Store,
+                                }),
+                                stencil_ops: None,
+                            }),
+                            timestamp_writes:    None,
+                            occlusion_query_set: None,
+                            multiview_mask:      None,
+                        });
+
+                        inset_pass.set_viewport(ix as f32, iy as f32, iw as f32, ih as f32, 0.0, 1.0);
+                        inset_pass.set_scissor_rect(ix, iy, iw, ih);
+                        inset_pass.set_pipeline(&self.render_pipeline);
+
+                        for (id, mr) in self.mesh_renderers.iter() {
+                            let Some(gpu) = self.entity_gpus.get(id) else { continue };
+                            let (albedo_view, normal_view) = if let Some(mat) = self.materials.get(id) {
+                                let av = if (mat.albedo_tex as usize) < self.textures.len() { &self.textures[mat.albedo_tex as usize].view } else { &self.default_tex.view };
+                                let nv = if (mat.normal_tex as usize) < self.textures.len() { &self.textures[mat.normal_tex as usize].view } else { &self.default_normal_tex.view };
+                                (av, nv)
+                            } else {
+                                (&self.default_tex.view, &self.default_normal_tex.view)
+                            };
+                            let tex_bg = self.make_tex_bind_group(albedo_view, normal_view);
+                            inset_pass.set_bind_group(0, &gpu.bind_group, &[]);
+                            inset_pass.set_bind_group(1, &tex_bg, &[]);
+                            inset_pass.set_bind_group(2, &self.light_bind_group, &[]);
+                            inset_pass.set_bind_group(3, &self.shadow_bind_group, &[]);
+                            match &mr.mesh_type {
+                                MeshType::Cube     => { inset_pass.set_vertex_buffer(0, self.cube_vertex_buffer.slice(..)); inset_pass.set_index_buffer(self.cube_index_buffer.slice(..), wgpu::IndexFormat::Uint16); inset_pass.draw_indexed(0..CUBE_INDICES.len() as u32, 0, 0..1); },
+                                MeshType::Plane    => { inset_pass.set_vertex_buffer(0, self.plane_vertex_buffer.slice(..)); inset_pass.set_index_buffer(self.plane_index_buffer.slice(..), wgpu::IndexFormat::Uint16); inset_pass.draw_indexed(0..PLANE_INDICES.len() as u32, 0, 0..1); },
+                                MeshType::Sphere   => { inset_pass.set_vertex_buffer(0, self.sphere_vbuf.slice(..)); inset_pass.set_index_buffer(self.sphere_ibuf.slice(..), wgpu::IndexFormat::Uint32); inset_pass.draw_indexed(0..self.sphere_ilen, 0, 0..1); },
+                                MeshType::Cylinder => { inset_pass.set_vertex_buffer(0, self.cylinder_vbuf.slice(..)); inset_pass.set_index_buffer(self.cylinder_ibuf.slice(..), wgpu::IndexFormat::Uint32); inset_pass.draw_indexed(0..self.cylinder_ilen, 0, 0..1); },
+                                MeshType::Custom(n) => { if let Some(cm) = self.custom_meshes.get(*n) { inset_pass.set_vertex_buffer(0, cm.vertex_buffer.slice(..)); inset_pass.set_index_buffer(cm.index_buffer.slice(..), wgpu::IndexFormat::Uint32); inset_pass.draw_indexed(0..cm.index_count, 0, 0..1); } },
+                            };
+                        }
+                    }
+                    self.queue.submit(std::iter::once(encoder2.finish()));
+                }
+            }
+        }
+
         output.present();
     }
 }
@@ -1493,7 +1786,8 @@ impl World {
         const MOUSE_SEN: f32 = 0.002; // radians/pixel
 
         // ── 1. Rotation caméra ───────────────────────────────────────────────
-        self.camera_yaw   += self.input.mouse_dx * MOUSE_SEN;
+        // Keep mouse-look direction consistent with editor free camera.
+        self.camera_yaw   -= self.input.mouse_dx * MOUSE_SEN;
         self.camera_pitch -= self.input.mouse_dy * MOUSE_SEN;
         self.camera_pitch  = self.camera_pitch
             .clamp(-89.0_f32.to_radians(), 89.0_f32.to_radians());
@@ -1502,6 +1796,35 @@ impl World {
         let forward_xz = glam::Vec3::new(yaw.sin(), 0.0, -yaw.cos());
         let right_xz   = glam::Vec3::new(yaw.cos(), 0.0,  yaw.sin());
         let keys       = self.input.keys;
+
+        // Sync yaw back to player Transform so the mesh rotates visually
+        // and scripts can read the facing direction via get_rotation().
+        if let Some(pid) = self.player_entity {
+            if let Some(tr) = self.transforms.get_mut(pid) {
+                tr.rotation.y = yaw.to_degrees();
+            }
+        }
+
+        // Mouse-look sync: only for cameras with follow_entity=true (FPS/TPS mode).
+        // Static cameras (follow_entity=false) keep their manually-set local transform.
+        // - Has parent → parent supplies yaw (via player rotation.y), camera only gets pitch.
+        // - No parent  → camera gets both yaw and pitch.
+        if self.is_game_mode {
+            if let Some(cam_id) = self.active_camera {
+                let follow = self.cameras.get(cam_id).map(|c| c.follow_entity).unwrap_or(false);
+                if follow {
+                    let has_parent = self.parents.get(cam_id).is_some();
+                    let yaw_deg    = yaw.to_degrees();
+                    let pitch_deg  = self.camera_pitch.to_degrees();
+                    if let Some(ct) = self.transforms.get_mut(cam_id) {
+                        ct.rotation.x = pitch_deg;
+                        if !has_parent {
+                            ct.rotation.y = yaw_deg;
+                        }
+                    }
+                }
+            }
+        }
 
         // ── 2. Gravité + input → velocity ────────────────────────────────────
         // Collecte des IDs dynamiques (évite double-borrow sur self.rigid_bodies)
@@ -1643,20 +1966,6 @@ impl World {
             }
         }
 
-        if let Some(pid) = self.player_entity {
-            if let Some(tr) = self.transforms.get(pid) {
-                let eye   = tr.position + glam::Vec3::new(0.0, 1.6, 0.0);
-                let pitch = self.camera_pitch;
-                // Magnitude est 1 par construction ; .normalize() protège contre l'arrondi f32 à pitch extrême.
-                let fwd   = glam::Vec3::new(
-                    pitch.cos() * yaw.sin(),
-                    pitch.sin(),
-                    -pitch.cos() * yaw.cos(),
-                ).normalize();
-                self.camera.eye    = eye;
-                self.camera.target = eye + fwd;
-            }
-        }
     }
 }
 
@@ -1673,6 +1982,11 @@ impl World {
         });
     }
 
+    /// Supprime la point light de l'entité (sans supprimer l'entité elle-même).
+    pub fn remove_point_light(&mut self, id: usize) {
+        self.point_lights.remove(id);
+    }
+
     /// Définit la lumière directionnelle (soleil). Un seul appel suffit.
     /// direction (dx, dy, dz) : vecteur vers lequel la lumière pointe (normalisé automatiquement).
     pub fn add_directional_light(
@@ -1682,10 +1996,34 @@ impl World {
         intensity: f32,
     ) {
         self.directional_light = Some(DirectionalLightData {
-            direction: glam::Vec3::new(dx, dy, dz),
-            color:     glam::Vec3::new(r, g, b),
+            direction:      glam::Vec3::new(dx, dy, dz),
+            color:          glam::Vec3::new(r, g, b),
             intensity,
+            cone_angle_deg: 30.0,
         });
+    }
+
+    /// Ajoute une lumière directionnelle (spotlight) pilotée par l'entité `id`.
+    /// `cone_angle_deg` : demi-angle extérieur du cône en degrés (ex: 30.0).
+    pub fn add_directional_light_entity(&mut self, id: usize, r: f32, g: f32, b: f32, intensity: f32, cone_angle_deg: f32) {
+        self.directional_light = Some(DirectionalLightData {
+            direction:      glam::Vec3::new(0.0, -1.0, 0.0),
+            color:          glam::Vec3::new(r, g, b),
+            intensity,
+            cone_angle_deg: cone_angle_deg.clamp(1.0, 89.0),
+        });
+        self.directional_light_entity = Some(id);
+    }
+
+    /// Lie une entité existante à la lumière directionnelle (sa rotation pilote la direction).
+    pub fn set_directional_light_entity(&mut self, id: usize) {
+        self.directional_light_entity = Some(id);
+    }
+
+    /// Supprime la lumière directionnelle globale (la scène n'en aura plus).
+    pub fn remove_directional_light(&mut self) {
+        self.directional_light = None;
+        self.directional_light_entity = None;
     }
 
     /// Définit la lumière ambiante globale.
@@ -1748,9 +2086,10 @@ impl World {
         // Lumière directionnelle
         if let Some(dl) = scene.directional_light {
             self.directional_light = Some(DirectionalLightData {
-                direction: glam::Vec3::from(dl.direction),
-                color:     glam::Vec3::from(dl.color),
-                intensity: dl.intensity,
+                direction:      glam::Vec3::from(dl.direction),
+                color:          glam::Vec3::from(dl.color),
+                intensity:      dl.intensity,
+                cone_angle_deg: dl.cone_angle_deg,
             });
         }
 
@@ -1862,9 +2201,10 @@ impl World {
         use scene::{SceneEntityData, SceneData};
 
         let directional_light = self.directional_light.as_ref().map(|dl| SceneDirectionalLight {
-            direction: dl.direction.to_array(),
-            color:     dl.color.to_array(),
-            intensity: dl.intensity,
+            direction:      dl.direction.to_array(),
+            color:          dl.color.to_array(),
+            intensity:      dl.intensity,
+            cone_angle_deg: dl.cone_angle_deg,
         });
 
         // Collecter tous les IDs d'entités uniques
@@ -1942,11 +2282,39 @@ impl World {
         }
 
         let scene = SceneData { directional_light, entities };
-        serde_json::to_string_pretty(&scene).unwrap_or_default()
+        match serde_json::to_string_pretty(&scene) {
+            Ok(s) => s,
+            Err(e) => {
+                web_sys::console::error_1(&format!("[World] save_scene serde error: {}", e).into());
+                "{\"entities\":[]}".to_string()
+            }
+        }
     }
 }
 
 impl World {
+    /// Align internal yaw/pitch state to the current active camera world orientation.
+    /// This prevents "snap" on Play start when follow_entity camera control is enabled.
+    fn sync_look_from_active_camera(&mut self) {
+        let Some(cam_id) = self.active_camera else { return };
+        let follow = self.cameras.get(cam_id).map(|c| c.follow_entity).unwrap_or(false);
+        if !follow {
+            return;
+        }
+
+        let world = self.compute_world_matrix(cam_id);
+        let forward = -(world.col(2).truncate().normalize_or_zero());
+        if forward.length_squared() < 1e-6 {
+            return;
+        }
+
+        self.camera_yaw = forward.x.atan2(-forward.z);
+        self.camera_pitch = forward
+            .y
+            .asin()
+            .clamp(-89.0_f32.to_radians(), 89.0_f32.to_radians());
+    }
+
     /// Calcule la matrice world de l'entité en remontant la chaîne de parents.
     /// Les entités racines (sans parent) retournent directement leur matrix locale.
     fn compute_world_matrix(&self, id: usize) -> Mat4 {
@@ -1979,10 +2347,13 @@ impl World {
     fn build_view_from_transform(t: &Transform) -> glam::Mat4 {
         use glam::{Mat4, Vec3, Vec4};
 
+        // YXZ order: yaw (Y) first so it always rotates around world-up,
+        // then pitch (X) around the now-yawed local X axis.
+        // This matches the standard FPS / third-person camera convention.
         let rot = Mat4::from_euler(
-            EulerRot::XYZ,
-            t.rotation.x.to_radians(),
+            EulerRot::YXZ,
             t.rotation.y.to_radians(),
+            t.rotation.x.to_radians(),
             t.rotation.z.to_radians(),
         );
 
@@ -2002,44 +2373,56 @@ impl World {
         Mat4::look_at_rh(t.position, t.position + forward, up)
     }
 
-    fn camera_matrix(&self, aspect: f32) -> glam::Mat4 {
-        use glam::Mat4;
-        // Priority (game mode only): FPS player > Active camera entity > Orbital camera
-        // In editor mode, always fall through to orbital camera.
+    /// Build a view matrix directly from a world-space Mat4 (no euler decomposition).
+    /// Forward = -Z column, position = column 3.
+    fn view_from_world_mat(world: &glam::Mat4) -> glam::Mat4 {
+        use glam::Vec3;
+        let pos     = world.col(3).truncate();
+        let forward = -(world.col(2).truncate().normalize_or_zero());
+        let up_ref  = if forward.dot(Vec3::Y).abs() > 0.999 { Vec3::Z } else { Vec3::Y };
+        let right   = forward.cross(up_ref).normalize();
+        let up      = right.cross(forward).normalize();
+        glam::Mat4::look_at_rh(pos, pos + forward, up)
+    }
+
+    /// Builds proj*view for a specific camera entity (using its world transform).
+    fn entity_cam_matrix(&self, cam_id: usize, aspect: f32) -> Option<glam::Mat4> {
+        self.transforms.get(cam_id)?;
+        let cam  = self.cameras.get(cam_id);
+        let fov  = cam.map(|c| c.fov).unwrap_or(60.0);
+        let near = cam.map(|c| c.near).unwrap_or(0.1);
+        let far  = cam.map(|c| c.far).unwrap_or(1000.0);
+        let proj = glam::Mat4::perspective_rh(fov.to_radians(), aspect, near, far);
+        let world = self.compute_world_matrix(cam_id);
+        let (_scale, rot, pos) = world.to_scale_rotation_translation();
+        // Camera convention: local -Z is forward.
+        let forward = (rot * glam::Vec3::new(0.0, 0.0, -1.0)).normalize_or_zero();
+        let up = (rot * glam::Vec3::Y).normalize_or_zero();
+        if forward.length_squared() < 1e-6 || up.length_squared() < 1e-6 {
+            return None;
+        }
+        let view = glam::Mat4::look_at_rh(pos, pos + forward, up);
+        Some(proj * view)
+    }
+
+    /// Main viewport camera: active entity camera (game mode) or orbital editor camera.
+    /// Does NOT include preview_camera — used for the main render pass and get_view_proj().
+    fn main_camera_matrix(&self, aspect: f32) -> glam::Mat4 {
         if self.is_game_mode {
-            if let Some(pid) = self.player_entity {
-                if let Some(t) = self.transforms.get(pid) {
-                    let cam  = self.cameras.get(pid);
-                    let fov  = cam.map(|c| c.fov).unwrap_or(60.0);
-                    let near = cam.map(|c| c.near).unwrap_or(0.1);
-                    let far  = cam.map(|c| c.far).unwrap_or(1000.0);
-                    let proj = Mat4::perspective_rh(fov.to_radians(), aspect, near, far);
-                    if cam.map(|c| c.follow_entity).unwrap_or(true) == false {
-                        let view = self.camera.view_matrix();
-                        return proj * view;
-                    }
-                    let view = Self::build_view_from_transform(t);
-                    return proj * view;
-                }
-            }
             if let Some(cam_id) = self.active_camera {
-                if let Some(t) = self.transforms.get(cam_id) {
-                    let cam  = self.cameras.get(cam_id);
-                    let fov  = cam.map(|c| c.fov).unwrap_or(60.0);
-                    let near = cam.map(|c| c.near).unwrap_or(0.1);
-                    let far  = cam.map(|c| c.far).unwrap_or(1000.0);
-                    let proj = Mat4::perspective_rh(fov.to_radians(), aspect, near, far);
-                    if cam.map(|c| c.follow_entity).unwrap_or(true) == false {
-                        let view = self.camera.view_matrix();
-                        return proj * view;
-                    }
-                    let view = Self::build_view_from_transform(t);
-                    return proj * view;
-                }
+                if let Some(m) = self.entity_cam_matrix(cam_id, aspect) { return m; }
             }
         }
-        // Fallback: orbital camera
         self.camera.proj_matrix(aspect) * self.camera.view_matrix()
+    }
+
+    /// Full-priority camera: preview > active (game mode) > orbital.
+    /// Used only for get_view_proj() when TS side needs to know the current "rendered from" camera.
+    fn camera_matrix(&self, aspect: f32) -> glam::Mat4 {
+        if let Some(prev_id) = self.preview_camera {
+            if let Some(m) = self.entity_cam_matrix(prev_id, aspect) { return m; }
+        }
+        self.main_camera_matrix(aspect)
     }
 
     fn make_tex_bind_group(
@@ -2065,6 +2448,27 @@ impl World {
     /// Les entités persistantes et la texture_registry sont conservées.
     /// La directional_light est réinitialisée.
     fn clear_scene(&mut self) {
+        // 0. Promouvoir les entités persistantes dont le parent est non-persistant.
+        //    Doit se faire AVANT la suppression pour que compute_world_matrix fonctionne.
+        let orphans: Vec<usize> = self.persistent_entities.iter()
+            .copied()
+            .filter(|&pid| {
+                self.parents.get(pid)
+                    .map(|p| !self.persistent_entities.contains(&p.parent_id))
+                    .unwrap_or(false)
+            })
+            .collect();
+        for pid in orphans {
+            let world_mat = self.compute_world_matrix(pid);
+            let (scale, rotation, translation) = world_mat.to_scale_rotation_translation();
+            if let Some(t) = self.transforms.get_mut(pid) {
+                t.position = translation;
+                t.rotation = Self::quat_to_euler_deg(rotation);
+                t.scale    = scale;
+            }
+            self.parents.remove(pid);
+        }
+
         // Collecter tous les IDs présents dans n'importe quel SparseSet
         let all_ids: HashSet<usize> = self.transforms.iter().map(|(id, _)| id)
             .chain(self.mesh_renderers.iter().map(|(id, _)| id))
@@ -2088,7 +2492,8 @@ impl World {
             self.cameras.remove(id);
             self.parents.remove(id);
         }
-        self.active_camera = None;
+        self.active_camera  = None;
+        self.preview_camera = None;
 
         // Reset next_id to 0 (or just after max persistent entity ID)
         self.next_id = self.persistent_entities
@@ -2102,5 +2507,6 @@ impl World {
         self.tags.retain(|id, _| self.persistent_entities.contains(id));
 
         self.directional_light = None;
+        self.directional_light_entity = None;
     }
 }
